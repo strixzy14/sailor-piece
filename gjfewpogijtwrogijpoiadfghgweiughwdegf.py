@@ -96,7 +96,7 @@ local StatPoints = LocalPlayer:WaitForChild("Data"):WaitForChild("StatPoints")
 _G.BoughtObs = false
 _G.HasObsHaki = false
 _G.HasDarkBlade = false
-_G.StatResetDone = false -- ตัวแปรใหม่ เอาไว้เช็คว่ารีเซ็ตแต้มไปหรือยัง
+_G.StatResetDone = false 
 _G.LastPortalUsed = nil 
 _G.LastPortalTick = 0
 
@@ -284,7 +284,6 @@ local function CreateUI()
             local hasBuso = false
             local hasDB = false
             
-            -- ค้นหาฮาคิและดาบใน Character
             local char = LocalPlayer.Character
             if char then
                 for _, v in pairs(char:GetChildren()) do
@@ -301,7 +300,6 @@ local function CreateUI()
                 if leftArm and (leftArm.Material == Enum.Material.Neon or leftArm.Color == Color3.new(0, 0, 0)) then hasBuso = true end
             end
             
-            -- ค้นหาดาบในกระเป๋า
             for _, v in pairs(LocalPlayer.Backpack:GetChildren()) do
                 local name = string.lower(v.Name)
                 if v:IsA("Tool") and string.find(name, "dark") and string.find(name, "blade") then hasDB = true end
@@ -406,14 +404,10 @@ local function autoAllocate()
 
     pcall(function()
         if _G.HasDarkBlade then
-            -- ถ้ามีดาบดำ ให้อัป Sword อย่างเดียว (ไม่อัป Melee เลย)
             if dmgPoints > 0 then RS.RemoteEvents.AllocateStat:FireServer("Sword", dmgPoints) end
         else
-            -- ถ้ายังไม่มีดาบดำ ก็อัป Melee ปกติ
             if dmgPoints > 0 then RS.RemoteEvents.AllocateStat:FireServer("Melee", dmgPoints) end
         end
-        
-        -- อัปเลือด 30% เสมอ
         if defensePoints > 0 then RS.RemoteEvents.AllocateStat:FireServer("Defense", defensePoints) end
     end)
 end
@@ -506,16 +500,16 @@ task.spawn(function()
         local hum = char:FindFirstChild("Humanoid")
         local hrp = char.HumanoidRootPart
         local levelVal = LocalPlayer.Data:FindFirstChild("Level")
-        
         local currentLevel = levelVal and levelVal.Value or 0
 
         -- ========================================================
-        -- 🌟 เปิดฮาคิ
+        -- 🌟 เปิดฮาคิ และ Auto Skill (เพิ่มสกิล X)
         -- ========================================================
         if char:GetAttribute("HakiActivated") ~= true then
             pcall(function()
-                UpdateStatus("✨ กำลังเปิด Haki...", Color3.fromRGB(200, 200, 255))
+                UpdateStatus("✨ กำลังเปิด Haki และ สกิล...", Color3.fromRGB(200, 200, 255))
                 RS:WaitForChild("RemoteEvents"):WaitForChild("SettingsToggle"):FireServer("AutoSkillZ", true)
+                RS:WaitForChild("RemoteEvents"):WaitForChild("SettingsToggle"):FireServer("AutoSkillX", true) -- เปิดสกิล X เพิ่ม
                 RS:WaitForChild("RemoteEvents"):WaitForChild("HakiRemote"):FireServer("Toggle")
                 char:SetAttribute("HakiActivated", true)
             end)
@@ -525,7 +519,6 @@ task.spawn(function()
         -- 🔄 ระบบรีเซ็ต Stat ย้ายสาย (ทำงานแค่ครั้งเดียวเมื่อตรวจพบดาบดำ)
         -- ========================================================
         if _G.HasDarkBlade and not _G.StatResetDone then
-            -- เช็คว่ามีแต้มอัปอยู่ในสายหมัด (Melee) หรือไม่ ถ้ามีแปลว่ายังไม่ได้ย้ายสาย ให้กดรีเซ็ตเลย
             local meleeStat = LocalPlayer.Data:FindFirstChild("Melee")
             if meleeStat and meleeStat.Value > 1 then
                 UpdateStatus("🔄 รีเซ็ต Stat เพื่อย้ายไปสายดาบ!", Color3.fromRGB(255, 255, 100))
@@ -534,7 +527,7 @@ task.spawn(function()
                 end)
                 task.wait(1.5)
             end
-            _G.StatResetDone = true -- จำไว้ว่ารีเซ็ตไปแล้ว จะได้ไม่รีเซ็ตรัวๆ
+            _G.StatResetDone = true
         end
 
         local targetPortal = GetTargetPortal(currentLevel)
@@ -690,7 +683,7 @@ task.spawn(function()
                 end
             end)
 
-            UpdateStatus("⚔️ ฟามมอนอยู่: " .. tostring(npcType), Color3.fromRGB(100, 255, 100))
+            UpdateStatus("⚔️ กาลามังฟาม: " .. tostring(npcType), Color3.fromRGB(100, 255, 100))
 
             repeat 
                 RunService.Heartbeat:Wait() 
