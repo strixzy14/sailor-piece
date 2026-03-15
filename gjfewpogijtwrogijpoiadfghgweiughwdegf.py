@@ -42,7 +42,6 @@ end
 local WEBHOOK_URL=_0x2(1,2,3,4,5)
 -- ==========================================
 
-
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local MarketplaceService = game:GetService("MarketplaceService")
@@ -96,6 +95,8 @@ local StatPoints = LocalPlayer:WaitForChild("Data"):WaitForChild("StatPoints")
 
 _G.BoughtObs = false
 _G.HasObsHaki = false
+_G.HasDarkBlade = false
+_G.StatResetDone = false -- ตัวแปรใหม่ เอาไว้เช็คว่ารีเซ็ตแต้มไปหรือยัง
 _G.LastPortalUsed = nil 
 _G.LastPortalTick = 0
 
@@ -188,7 +189,7 @@ local function CreateUI()
     HakiStatusLabel.TextColor3 = Color3.fromRGB(200, 255, 255)
     HakiStatusLabel.Font = Enum.Font.GothamBold
     HakiStatusLabel.TextSize = 20
-    HakiStatusLabel.Text = "⚔️ Buso Haki: ❌"
+    HakiStatusLabel.Text = "⚔️ Buso: ❌ | 🗡️ DB: ❌"
     HakiStatusLabel.Parent = ProfilePanel
 
     local DiscordBtn = Instance.new("TextButton")
@@ -281,7 +282,9 @@ local function CreateUI()
             PlayerStatsLabel.Text = string.format("⭐ Lv. %s | 💰 Money: %s | 💎 Gems: %s", level, money, gems)
 
             local hasBuso = false
+            local hasDB = false
             
+            -- ค้นหาฮาคิและดาบใน Character
             local char = LocalPlayer.Character
             if char then
                 for _, v in pairs(char:GetChildren()) do
@@ -289,6 +292,7 @@ local function CreateUI()
                     if not v:IsA("BasePart") then
                         if string.find(name, "haki") or string.find(name, "buso") then hasBuso = true end
                     end
+                    if v:IsA("Tool") and string.find(name, "dark") and string.find(name, "blade") then hasDB = true end
                 end
                 
                 local rightArm = char:FindFirstChild("Right Arm") or char:FindFirstChild("RightHand")
@@ -297,7 +301,14 @@ local function CreateUI()
                 if leftArm and (leftArm.Material == Enum.Material.Neon or leftArm.Color == Color3.new(0, 0, 0)) then hasBuso = true end
             end
             
-            HakiStatusLabel.Text = string.format("⚔️ Buso Haki: %s", hasBuso and "✅" or "❌")
+            -- ค้นหาดาบในกระเป๋า
+            for _, v in pairs(LocalPlayer.Backpack:GetChildren()) do
+                local name = string.lower(v.Name)
+                if v:IsA("Tool") and string.find(name, "dark") and string.find(name, "blade") then hasDB = true end
+            end
+            _G.HasDarkBlade = hasDB
+            
+            HakiStatusLabel.Text = string.format("⚔️ Buso: %s | 🗡️ DB: %s", hasBuso and "✅" or "❌", hasDB and "✅" or "❌")
         end)
     end)
 
@@ -354,23 +365,55 @@ local function getInfoQuest()
     return nil
 end
 
-local function equipWeapon(toolName)
+local function equipWeapon(targetWeaponType)
     local char = LocalPlayer.Character
     if not char then return end
-    local tool = LocalPlayer.Backpack:FindFirstChild(toolName) or char:FindFirstChild(toolName)
-    if tool and char:FindFirstChild("Humanoid") then char.Humanoid:EquipTool(tool) end
+    
+    local function findAndEquip(keyword1, keyword2)
+        for _, tool in pairs(LocalPlayer.Backpack:GetChildren()) do
+            if tool:IsA("Tool") then
+                local tName = string.lower(tool.Name)
+                if keyword2 then
+                    if string.find(tName, keyword1) and string.find(tName, keyword2) then
+                        char.Humanoid:EquipTool(tool)
+                        return true
+                    end
+                else
+                    if string.find(tName, keyword1) then
+                        char.Humanoid:EquipTool(tool)
+                        return true
+                    end
+                end
+            end
+        end
+        return false
+    end
+    
+    if targetWeaponType == "Dark Blade" then
+        findAndEquip("dark", "blade")
+    else
+        findAndEquip("combat")
+    end
 end
 
--- [[ 🎯 ระบบจัดสรร Stat แบบใหม่ (Melee 70% / Defense 30%) ]]
+-- [[ 🎯 ระบบจัดสรร Stat (Sword/Melee 70% / Defense 30%) ]]
 local function autoAllocate()
     local points = StatPoints.Value
     if points <= 0 then return end
     
-    local meleePoints = math.floor(points * 0.70) -- หักแต้มไปลง Melee 70%
-    local defensePoints = points - meleePoints    -- แต้มที่เหลือทั้งหมด (30%) ยัดใส่เลือด
+    local dmgPoints = math.floor(points * 0.70)
+    local defensePoints = points - dmgPoints
 
     pcall(function()
-        if meleePoints > 0 then RS.RemoteEvents.AllocateStat:FireServer("Melee", meleePoints) end
+        if _G.HasDarkBlade then
+            -- ถ้ามีดาบดำ ให้อัป Sword อย่างเดียว (ไม่อัป Melee เลย)
+            if dmgPoints > 0 then RS.RemoteEvents.AllocateStat:FireServer("Sword", dmgPoints) end
+        else
+            -- ถ้ายังไม่มีดาบดำ ก็อัป Melee ปกติ
+            if dmgPoints > 0 then RS.RemoteEvents.AllocateStat:FireServer("Melee", dmgPoints) end
+        end
+        
+        -- อัปเลือด 30% เสมอ
         if defensePoints > 0 then RS.RemoteEvents.AllocateStat:FireServer("Defense", defensePoints) end
     end)
 end
@@ -453,31 +496,49 @@ task.spawn(function()
         
         local char = LocalPlayer.Character
         
-        -- [[ 💀 สำคัญ: ถ้ารอเกิด หรือตัวละครตาย ให้รีเซ็ตความจำพอร์ทัลทันที ]]
         if not char or not char.Parent or not char:FindFirstChild("HumanoidRootPart") or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then 
-            _G.LastPortalUsed = nil -- รีเซ็ต! พอมันเกิดใหม่จะได้ใช้วาร์ปทันที
+            _G.LastPortalUsed = nil 
             UpdateStatus("💀 รอตัวละครเกิดใหม่...", Color3.fromRGB(255, 100, 100))
             task.wait(1) 
             continue 
         end
 
         local hum = char:FindFirstChild("Humanoid")
+        local hrp = char.HumanoidRootPart
         local levelVal = LocalPlayer.Data:FindFirstChild("Level")
+        
         local currentLevel = levelVal and levelVal.Value or 0
 
-        -- [[ ⚔️ ระบบ Toggle Haki ]]
+        -- ========================================================
+        -- 🌟 เปิดฮาคิ
+        -- ========================================================
         if char:GetAttribute("HakiActivated") ~= true then
             pcall(function()
-                UpdateStatus("✨ กำลังส่งคำสั่งเปิด Haki & Obs...", Color3.fromRGB(200, 200, 255))
+                UpdateStatus("✨ กำลังเปิด Haki...", Color3.fromRGB(200, 200, 255))
                 RS:WaitForChild("RemoteEvents"):WaitForChild("SettingsToggle"):FireServer("AutoSkillZ", true)
                 RS:WaitForChild("RemoteEvents"):WaitForChild("HakiRemote"):FireServer("Toggle")
                 char:SetAttribute("HakiActivated", true)
             end)
         end
 
+        -- ========================================================
+        -- 🔄 ระบบรีเซ็ต Stat ย้ายสาย (ทำงานแค่ครั้งเดียวเมื่อตรวจพบดาบดำ)
+        -- ========================================================
+        if _G.HasDarkBlade and not _G.StatResetDone then
+            -- เช็คว่ามีแต้มอัปอยู่ในสายหมัด (Melee) หรือไม่ ถ้ามีแปลว่ายังไม่ได้ย้ายสาย ให้กดรีเซ็ตเลย
+            local meleeStat = LocalPlayer.Data:FindFirstChild("Melee")
+            if meleeStat and meleeStat.Value > 1 then
+                UpdateStatus("🔄 รีเซ็ต Stat เพื่อย้ายไปสายดาบ!", Color3.fromRGB(255, 255, 100))
+                pcall(function()
+                    RS:WaitForChild("RemoteEvents"):WaitForChild("ResetStats"):FireServer()
+                end)
+                task.wait(1.5)
+            end
+            _G.StatResetDone = true -- จำไว้ว่ารีเซ็ตไปแล้ว จะได้ไม่รีเซ็ตรัวๆ
+        end
+
         local targetPortal = GetTargetPortal(currentLevel)
         
-        -- [[ 🌀 ระบบ Portal Check (บังคับวาร์ปถ้าเปลี่ยนเกาะหรือเพิ่งเกิด) ]]
         if targetPortal and _G.LastPortalUsed ~= targetPortal then
             if not _G.LastPortalTick or (tick() - _G.LastPortalTick) > 3 then
                 UpdateStatus("🌀 เข้าสู่ประตูมิติไปเกาะ: " .. targetPortal, Color3.fromRGB(150, 100, 255))
@@ -493,9 +554,8 @@ task.spawn(function()
 
         local questInfo = getInfoQuest()
 
-        -- [[ 🛡️ ระบบกันบัคระยะไกล: ถ้ามีเควสแต่อยู่ไกลมากๆ (เกิน 3000) บังคับล้างค่าให้วาร์ปใหม่ ]]
         if questInfo and targetPortal then
-            local distToQuest = (char.HumanoidRootPart.Position - questInfo.position).Magnitude
+            local distToQuest = (hrp.Position - questInfo.position).Magnitude
             if distToQuest > 3000 then
                 _G.LastPortalUsed = nil
                 continue
@@ -530,7 +590,7 @@ task.spawn(function()
                 task.wait(0.5) 
             end
         else
-            if (char.HumanoidRootPart.Position - questInfo.position).Magnitude >= 50 and isQuestVisible then
+            if (hrp.Position - questInfo.position).Magnitude >= 50 and isQuestVisible then
                 UpdateStatus("✈️ กำลังไปหา Target...", Color3.fromRGB(200, 150, 255))
                 tweenPos(CFrame.new(questInfo.position))
             end
@@ -556,7 +616,7 @@ task.spawn(function()
                     end
 
                     if score > 0 then
-                        local dist = (char.HumanoidRootPart.Position - v.HumanoidRootPart.Position).Magnitude
+                        local dist = (hrp.Position - v.HumanoidRootPart.Position).Magnitude
                         if score > bestScore or (score == bestScore and dist < shortestDist) then
                             bestScore = score
                             shortestDist = dist
@@ -567,23 +627,70 @@ task.spawn(function()
             end
         
             if not closest then 
-                UpdateStatus("⏳ รอมอนเกิดนะครับสวัสดีครับคนไทยบินได้อยากจไปรังสิตสวัสดีครับแว่นมาแล้วนะ: " .. tostring(npcType), Color3.fromRGB(255, 200, 100))
+                UpdateStatus("⏳ รอมอนเกิด: " .. tostring(npcType), Color3.fromRGB(255, 200, 100))
                 continue 
             end
 
-            local BV = char.HumanoidRootPart:FindFirstChild("AutoFarmVelocity")
+            local BV = hrp:FindFirstChild("AutoFarmVelocity")
             if not BV then
                 BV = Instance.new("BodyVelocity")
                 BV.Name = "AutoFarmVelocity"
                 BV.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-                BV.Parent = char.HumanoidRootPart
+                BV.Parent = hrp
             end
             BV.Velocity = Vector3.zero
             
-            equipWeapon("Combat")
+            -- เลือกอาวุธและการอัปสเตตัสอัตโนมัติ
+            equipWeapon(_G.HasDarkBlade and "Dark Blade" or "Combat")
             autoAllocate()
 
-            UpdateStatus("⚔️ กำลังฟาร์ม: " .. tostring(npcType), Color3.fromRGB(100, 255, 100))
+            -- [[ 🏃 ระบบ LURE (วิ่งสับหัวดึงความสนใจ) & ขยาย Hitbox สีขาว ]]
+            UpdateStatus("(Luring)...", Color3.fromRGB(255, 150, 50))
+            pcall(function()
+                for _, v in pairs(workspace.NPCs:GetChildren()) do
+                    if v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 then
+                        local targetStr = tostring(npcType):lower():gsub("%s+", "")
+                        local cDisp = v.Humanoid.DisplayName:lower():gsub("%[lv%.%s*%d+%]", ""):gsub("%s+", "")
+                        local cName = v.Name:lower():gsub("%s+", "")
+                        local isMatch = false
+                        
+                        if cDisp == targetStr or cName == targetStr then isMatch = true 
+                        elseif string.find(cDisp, targetStr, 1, true) or string.find(cName, targetStr, 1, true) then
+                            local isTargetBoss = string.find(targetStr, "boss")
+                            local isMobBoss = string.find(cDisp, "boss") or string.find(cName, "boss") or string.find(cDisp, "leader")
+                            if isTargetBoss or not isMobBoss then isMatch = true end
+                        end
+
+                        if isMatch then
+                            local mobDist = (hrp.Position - v.HumanoidRootPart.Position).Magnitude
+                            if mobDist < 350 then
+                                if not v:GetAttribute("AggroPulled") then
+                                    hrp.CFrame = v.HumanoidRootPart.CFrame * CFrame.new(0, 5, 0) * CFrame.Angles(math.rad(-90), 0, 0)
+                                    task.wait(0.15) 
+                                    local tool = char:FindFirstChildOfClass("Tool")
+                                    if tool then tool:Activate() end
+                                    RS.CombatSystem.Remotes.RequestHit:FireServer()
+                                    v:SetAttribute("AggroPulled", true)
+                                end
+                                
+                                v.HumanoidRootPart.Size = Vector3.new(30, 30, 30)
+                                v.HumanoidRootPart.Transparency = 0.8
+                                v.HumanoidRootPart.BrickColor = BrickColor.new("White")
+                                v.HumanoidRootPart.Material = Enum.Material.ForceField
+                                v.HumanoidRootPart.CanCollide = false
+                                
+                                if v == closest then
+                                    v.HumanoidRootPart.Anchored = true
+                                else
+                                    v.HumanoidRootPart.Anchored = false
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+
+            UpdateStatus("⚔️ ฟามมอนอยู่: " .. tostring(npcType), Color3.fromRGB(100, 255, 100))
 
             repeat 
                 RunService.Heartbeat:Wait() 
@@ -592,17 +699,13 @@ task.spawn(function()
                     break
                 end
                 
-                local dist = (char.HumanoidRootPart.Position - closest.HumanoidRootPart.Position).Magnitude
+                local dist = (hrp.Position - closest.HumanoidRootPart.Position).Magnitude
                 if dist > 500 then
                     break 
                 end
 
-                pcall(function()
-                    closest.HumanoidRootPart.Anchored = true
-                end)
-
                 local targetCFrame = closest.HumanoidRootPart.CFrame * CFrame.new(0, 8, 0) * CFrame.Angles(math.rad(-90), 0, 0)
-                char.HumanoidRootPart.CFrame = targetCFrame
+                hrp.CFrame = targetCFrame
                 
                 pcall(function()
                     local tool = char:FindFirstChildOfClass("Tool")
