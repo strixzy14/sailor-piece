@@ -97,8 +97,9 @@ _G.BoughtObs = false
 _G.HasObsHaki = false
 _G.HasDarkBlade = false
 _G.StatResetDone = false 
-_G.LastPortalUsed = nil 
-_G.LastPortalTick = 0
+_G.CurrentIslandSpawn = nil 
+_G.AUTOFUNCTION = true -- ค่าเริ่มต้นคือเปิดฟาร์ม
+_G.SkillTick = 0
 
 -- [[ 🎨 UI System ]] --
 local function CreateUI()
@@ -192,12 +193,37 @@ local function CreateUI()
     HakiStatusLabel.Text = "⚔️ Buso: ❌ | 🗡️ DB: ❌"
     HakiStatusLabel.Parent = ProfilePanel
 
+    -- [[ 🎛️ ปุ่ม Toggle Auto Farm ]]
+    local ToggleFarmBtn = Instance.new("TextButton")
+    ToggleFarmBtn.Name = "ToggleFarmBtn"
+    ToggleFarmBtn.Size = UDim2.new(0, 150, 0, 40)
+    ToggleFarmBtn.Position = UDim2.new(0.5, 10, 0.88, 0)
+    ToggleFarmBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 40) 
+    ToggleFarmBtn.Text = "✅ Auto Farm: ON"
+    ToggleFarmBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    ToggleFarmBtn.Font = Enum.Font.GothamBold
+    ToggleFarmBtn.TextSize = 14
+    ToggleFarmBtn.Parent = ProfilePanel
+    Instance.new("UICorner", ToggleFarmBtn).CornerRadius = UDim.new(0, 8)
+
+    ToggleFarmBtn.MouseButton1Click:Connect(function()
+        _G.AUTOFUNCTION = not _G.AUTOFUNCTION
+        if _G.AUTOFUNCTION then
+            ToggleFarmBtn.Text = "✅ Auto Farm: ON"
+            ToggleFarmBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 40)
+        else
+            ToggleFarmBtn.Text = "❌ Auto Farm: OFF"
+            ToggleFarmBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+        end
+    end)
+
+    -- [[ 🔗 ปุ่ม Discord ]]
     local DiscordBtn = Instance.new("TextButton")
     DiscordBtn.Name = "DiscordButton"
-    DiscordBtn.Size = UDim2.new(0, 200, 0, 40)
-    DiscordBtn.Position = UDim2.new(0.5, -100, 0.88, 0)
+    DiscordBtn.Size = UDim2.new(0, 150, 0, 40)
+    DiscordBtn.Position = UDim2.new(0.5, -160, 0.88, 0)
     DiscordBtn.BackgroundColor3 = Color3.fromRGB(88, 101, 242) 
-    DiscordBtn.Text = "🔗 Copy Discord Link"
+    DiscordBtn.Text = "🔗 Discord"
     DiscordBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     DiscordBtn.Font = Enum.Font.GothamBold
     DiscordBtn.TextSize = 14
@@ -207,8 +233,8 @@ local function CreateUI()
     DiscordBtn.MouseButton1Click:Connect(function()
         setclipboard("https://discord.gg/UxyNE7KfaM")
         local oldText = DiscordBtn.Text
-        DiscordBtn.Text = "✅ Copied to Clipboard!"
-        task.wait(2)
+        DiscordBtn.Text = "✅ Copied!"
+        task.wait(1.5)
         DiscordBtn.Text = oldText
     end)
 
@@ -363,34 +389,33 @@ local function getInfoQuest()
     return nil
 end
 
-local function equipWeapon(targetWeaponType)
+-- [[ 🎯 Smart Equip: หาและใส่อาวุธให้ถูกอันเสมอ ]]
+local function equipBestWeapon()
     local char = LocalPlayer.Character
-    if not char then return end
+    if not char or not char:FindFirstChild("Humanoid") then return end
     
-    local function findAndEquip(keyword1, keyword2)
-        for _, tool in pairs(LocalPlayer.Backpack:GetChildren()) do
+    local bestTool = nil
+    local combatTool = nil
+    
+    local function scanTools(parent)
+        for _, tool in pairs(parent:GetChildren()) do
             if tool:IsA("Tool") then
-                local tName = string.lower(tool.Name)
-                if keyword2 then
-                    if string.find(tName, keyword1) and string.find(tName, keyword2) then
-                        char.Humanoid:EquipTool(tool)
-                        return true
-                    end
-                else
-                    if string.find(tName, keyword1) then
-                        char.Humanoid:EquipTool(tool)
-                        return true
-                    end
+                local name = string.lower(tool.Name)
+                if string.find(name, "dark") and string.find(name, "blade") then
+                    bestTool = tool
+                elseif string.find(name, "combat") then
+                    combatTool = tool
                 end
             end
         end
-        return false
     end
     
-    if targetWeaponType == "Dark Blade" then
-        findAndEquip("dark", "blade")
-    else
-        findAndEquip("combat")
+    scanTools(LocalPlayer.Backpack)
+    scanTools(char)
+    
+    local targetTool = bestTool or combatTool
+    if targetTool and targetTool.Parent ~= char then
+        char.Humanoid:EquipTool(targetTool)
     end
 end
 
@@ -468,8 +493,8 @@ local function tweenPos(targetCFrame)
     if noclip then noclip:Disconnect() end
 end
 
--- [[ 🌀 ระบบกำหนดเกาะตามเลเวล (Portal Manager) ]] --
-local function GetTargetPortal(level)
+-- [[ 🌀 ระบบดึงชื่อเกาะตามเลเวล (แทนพอร์ทัลเดิม) ]] --
+local function GetTargetIsland(level)
     if level >= 10000 then return "Judgement" end
     if level >= 9000 then return "Academy" end
     if level >= 8000 then return "Slime" end
@@ -482,16 +507,18 @@ end
 -- [[ ⚙️ Main Logic ]] --
 task.spawn(BoostFPS)
 
-_G.AUTOFUNCTION = true
-
 task.spawn(function()
-    while _G.AUTOFUNCTION do 
+    while true do 
         task.wait(0.1) 
         
+        if not _G.AUTOFUNCTION then
+            UpdateStatus("⏸️ พักการฟาร์มชั่วคราว...", Color3.fromRGB(200, 200, 200))
+            continue
+        end
+
         local char = LocalPlayer.Character
         
         if not char or not char.Parent or not char:FindFirstChild("HumanoidRootPart") or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then 
-            _G.LastPortalUsed = nil 
             UpdateStatus("💀 รอตัวละครเกิดใหม่...", Color3.fromRGB(255, 100, 100))
             task.wait(1) 
             continue 
@@ -502,22 +529,16 @@ task.spawn(function()
         local levelVal = LocalPlayer.Data:FindFirstChild("Level")
         local currentLevel = levelVal and levelVal.Value or 0
 
-        -- ========================================================
-        -- 🌟 เปิดฮาคิ และ Auto Skill (เพิ่มสกิล X)
-        -- ========================================================
         if char:GetAttribute("HakiActivated") ~= true then
             pcall(function()
-                UpdateStatus("✨ กำลังเปิด Haki และ สกิล...", Color3.fromRGB(200, 200, 255))
+                UpdateStatus("✨ กำลังเปิด Haki...", Color3.fromRGB(200, 200, 255))
                 RS:WaitForChild("RemoteEvents"):WaitForChild("SettingsToggle"):FireServer("AutoSkillZ", true)
-                RS:WaitForChild("RemoteEvents"):WaitForChild("SettingsToggle"):FireServer("AutoSkillX", true) -- เปิดสกิล X เพิ่ม
+                RS:WaitForChild("RemoteEvents"):WaitForChild("SettingsToggle"):FireServer("AutoSkillX", true) 
                 RS:WaitForChild("RemoteEvents"):WaitForChild("HakiRemote"):FireServer("Toggle")
                 char:SetAttribute("HakiActivated", true)
             end)
         end
 
-        -- ========================================================
-        -- 🔄 ระบบรีเซ็ต Stat ย้ายสาย (ทำงานแค่ครั้งเดียวเมื่อตรวจพบดาบดำ)
-        -- ========================================================
         if _G.HasDarkBlade and not _G.StatResetDone then
             local meleeStat = LocalPlayer.Data:FindFirstChild("Melee")
             if meleeStat and meleeStat.Value > 1 then
@@ -530,27 +551,62 @@ task.spawn(function()
             _G.StatResetDone = true
         end
 
-        local targetPortal = GetTargetPortal(currentLevel)
+        local targetIsland = GetTargetIsland(currentLevel)
         
-        if targetPortal and _G.LastPortalUsed ~= targetPortal then
-            if not _G.LastPortalTick or (tick() - _G.LastPortalTick) > 3 then
-                UpdateStatus("🌀 เข้าสู่ประตูมิติไปเกาะ: " .. targetPortal, Color3.fromRGB(150, 100, 255))
-                pcall(function()
-                    RS:WaitForChild("Remotes"):WaitForChild("TeleportToPortal"):FireServer(targetPortal)
-                end)
-                _G.LastPortalUsed = targetPortal
-                _G.LastPortalTick = tick()
-                task.wait(3) 
-                continue 
+        if targetIsland and _G.CurrentIslandSpawn ~= targetIsland then
+            local crystalName = "SpawnPointCrystal_" .. targetIsland
+            local crystalModel = nil
+            
+            for _, v in pairs(workspace:GetDescendants()) do
+                if v.Name == crystalName and v:IsA("Model") then
+                    crystalModel = v
+                    break
+                end
+            end
+            
+            if crystalModel then
+                local crystalPart = crystalModel.PrimaryPart or crystalModel:FindFirstChildWhichIsA("BasePart")
+                if crystalPart then
+                    UpdateStatus("📍 กำลังวาร์ปไปเซ็ตจุดเกิดที่เกาะ: " .. targetIsland, Color3.fromRGB(150, 100, 255))
+                    
+                    hrp.CFrame = crystalPart.CFrame * CFrame.new(0, 0, 4)
+                    task.wait(1) 
+                    
+                    local prompt = crystalModel:FindFirstChildWhichIsA("ProximityPrompt", true)
+                    if prompt then
+                        pcall(function()
+                            prompt.RequiresLineOfSight = false
+                            prompt.MaxActivationDistance = 50
+                            
+                            if fireproximityprompt then
+                                fireproximityprompt(prompt)
+                            else
+                                prompt:InputHoldBegin()
+                                task.wait(prompt.HoldDuration + 0.2)
+                                prompt:InputHoldEnd()
+                            end
+                        end)
+                        
+                        UpdateStatus("💀 เซ็ตจุดเกิดเสร็จสิ้น! กำลังรีเซ็ตตัวละคร...", Color3.fromRGB(255, 50, 50))
+                        task.wait(1)
+                        
+                        _G.CurrentIslandSpawn = targetIsland
+                        hum.Health = 0 
+                        task.wait(2)
+                        continue 
+                    end
+                end
             end
         end
 
         local questInfo = getInfoQuest()
 
-        if questInfo and targetPortal then
+        if questInfo and targetIsland then
             local distToQuest = (hrp.Position - questInfo.position).Magnitude
-            if distToQuest > 3000 then
-                _G.LastPortalUsed = nil
+            if distToQuest > 6000 then
+                UpdateStatus("⚠️ ระยะทางไกลเกินไป บังคับรีเซ็ตตัวละครเพื่อกลับจุดเกิด!", Color3.fromRGB(255, 100, 100))
+                hum.Health = 0
+                task.wait(2)
                 continue
             end
         end
@@ -633,11 +689,10 @@ task.spawn(function()
             end
             BV.Velocity = Vector3.zero
             
-            -- เลือกอาวุธและการอัปสเตตัสอัตโนมัติ
-            equipWeapon(_G.HasDarkBlade and "Dark Blade" or "Combat")
+            -- [[ 🎯 Smart Equip: หาอาวุธที่ถูกต้องมาใส่ให้เสมอ ]]
+            equipBestWeapon()
             autoAllocate()
 
-            -- [[ 🏃 ระบบ LURE (วิ่งสับหัวดึงความสนใจ) & ขยาย Hitbox สีขาว ]]
             UpdateStatus("(Luring)...", Color3.fromRGB(255, 150, 50))
             pcall(function()
                 for _, v in pairs(workspace.NPCs:GetChildren()) do
@@ -683,10 +738,13 @@ task.spawn(function()
                 end
             end)
 
-            UpdateStatus("⚔️ กาลามังฟาม: " .. tostring(npcType), Color3.fromRGB(100, 255, 100))
+            UpdateStatus("⚔️ กำลังฟามมอน: " .. tostring(npcType), Color3.fromRGB(100, 255, 100))
 
             repeat 
                 RunService.Heartbeat:Wait() 
+                
+                -- เช็คเงื่อนไขหยุดฟาร์มกลางคัน
+                if not _G.AUTOFUNCTION then break end
                 
                 if not closest or not closest.Parent or not closest:FindFirstChild("HumanoidRootPart") or closest.Humanoid.Health <= 0 or hum.Health <= 0 then
                     break
@@ -706,6 +764,20 @@ task.spawn(function()
                     
                     RS.CombatSystem.Remotes.RequestHit:FireServer()
                     RS.CombatSystem.Remotes.RequestHit:FireServer()
+                    
+
+                    if not _G.SkillTick or tick() - _G.SkillTick > 2 then -- กดสกิลทุกๆ 2 วินาที
+                        task.spawn(function()
+                            VIM:SendKeyEvent(true, Enum.KeyCode.Z, false, game)
+                            task.wait(0.05)
+                            VIM:SendKeyEvent(false, Enum.KeyCode.Z, false, game)
+                            task.wait(0.2)
+                            VIM:SendKeyEvent(true, Enum.KeyCode.X, false, game)
+                            task.wait(0.05)
+                            VIM:SendKeyEvent(false, Enum.KeyCode.X, false, game)
+                        end)
+                        _G.SkillTick = tick()
+                    end
                 end)
             until hum.Health <= 0 or not QuestUI.Quest.Visible
             
