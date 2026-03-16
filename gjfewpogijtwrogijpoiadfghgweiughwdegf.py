@@ -389,51 +389,51 @@ local function getInfoQuest()
     return nil
 end
 
--- [[ 🎯 Smart Equip: หาและใส่อาวุธให้ถูกอันเสมอ ]]
-local function equipBestWeapon()
-    local char = LocalPlayer.Character
-    if not char or not char:FindFirstChild("Humanoid") then return end
-    
-    local bestTool = nil
-    local combatTool = nil
-    
-    local function scanTools(parent)
-        for _, tool in pairs(parent:GetChildren()) do
-            if tool:IsA("Tool") then
-                local name = string.lower(tool.Name)
-                if string.find(name, "dark") and string.find(name, "blade") then
-                    bestTool = tool
-                elseif string.find(name, "combat") then
-                    combatTool = tool
-                end
+-- [ ระบบเช็คและสวมใส่ Dark Blade จากเซิร์ฟเวอร์ ] --
+local function checkDarkBlade(targetName)
+    local result = false
+    local connection
+    connection = RS.Remotes.UpdateInventory.OnClientEvent:Connect(function(tab, data)
+        for _, item in pairs(data) do
+            if item.name == targetName then result = true end
+        end
+    end)
+    RS.Remotes.RequestInventory:FireServer()
+    task.wait(0.5)
+    if connection then connection:Disconnect() end
+    return result
+end
+
+local function checkOwnerDarkBlade()
+    for _, container in pairs({LocalPlayer.Character, LocalPlayer.Backpack}) do
+        for _, tool in pairs(container:GetChildren()) do
+            if tool:IsA("Tool") and tool.ToolTip == "Black Blade" then
+                return true
             end
         end
     end
-    
-    scanTools(LocalPlayer.Backpack)
-    scanTools(char)
-    
-    local targetTool = bestTool or combatTool
-    if targetTool and targetTool.Parent ~= char then
-        char.Humanoid:EquipTool(targetTool)
-    end
+    return false
 end
 
--- [[ 🎯 ระบบจัดสรร Stat (Sword/Melee 70% / Defense 30%) ]]
-local function autoAllocate()
+-- [ 🎯 ระบบจัดสรร Stat ฉบับสมบูรณ์ (โจมตี 60% / ป้องกัน 40%) ] --
+local function autoAllocate(modeStat)
+    local StatPoints = LocalPlayer.Data:FindFirstChild("StatPoints")
+    if not StatPoints or StatPoints.Value <= 0 then return end
+
+    modeStat = modeStat or "Melee"
     local points = StatPoints.Value
-    if points <= 0 then return end
     
-    local dmgPoints = math.floor(points * 0.70)
-    local defensePoints = points - dmgPoints
+    local mainPoints = math.ceil(points * 0.6)
+    local defensePoints = points - mainPoints
 
     pcall(function()
-        if _G.HasDarkBlade then
-            if dmgPoints > 0 then RS.RemoteEvents.AllocateStat:FireServer("Sword", dmgPoints) end
-        else
-            if dmgPoints > 0 then RS.RemoteEvents.AllocateStat:FireServer("Melee", dmgPoints) end
+        if mainPoints > 0 then 
+            RS.RemoteEvents.AllocateStat:FireServer(modeStat, mainPoints) 
         end
-        if defensePoints > 0 then RS.RemoteEvents.AllocateStat:FireServer("Defense", defensePoints) end
+        task.wait(0.1) -- กันเซิร์ฟเวอร์รวน
+        if defensePoints > 0 then 
+            RS.RemoteEvents.AllocateStat:FireServer("Defense", defensePoints) 
+        end
     end)
 end
 
@@ -450,7 +450,7 @@ local function getnpcQuest(npcname)
 end
 
 -- [[ 🌀 ระบบ Noclip & Tween ]]
-local function tweenPos(targetCFrame)
+local function tweenPos(targetCFrame, callback)
     local char = LocalPlayer.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then return end
     
@@ -471,7 +471,7 @@ local function tweenPos(targetCFrame)
         local steps = math.floor(distance / 50) + 1 
         local startCFrame = root.CFrame
         for i = 1, steps do
-            if not char or not char.Parent or char.Humanoid.Health <= 0 then break end
+            if not char or char.Humanoid.Health <= 0 then break end
             root.CFrame = startCFrame:Lerp(targetCFrame, i / steps) * CFrame.new(0, 5, 0)
             task.wait(0.05)
         end
@@ -482,7 +482,7 @@ local function tweenPos(targetCFrame)
         local tween = TS:Create(root, TweenInfo.new(tweenTime, Enum.EasingStyle.Linear), {CFrame = targetCFrame})
         tween:Play()
         while tween.PlaybackState == Enum.PlaybackState.Playing do
-            if not char or not char.Parent or char.Humanoid.Health <= 0 then
+            if not char or char.Humanoid.Health <= 0 then
                 tween:Cancel()
                 break
             end
@@ -490,10 +490,10 @@ local function tweenPos(targetCFrame)
         end
     end
     
+    if callback then callback() end
     if noclip then noclip:Disconnect() end
 end
 
--- [[ 🌀 ระบบดึงชื่อเกาะตามเลเวล (แทนพอร์ทัลเดิม) ]] --
 local function GetTargetIsland(level)
     if level >= 10000 then return "Judgement" end
     if level >= 9000 then return "Academy" end
@@ -504,8 +504,39 @@ local function GetTargetIsland(level)
     return nil
 end
 
+-- [[ 🛡️ ระบบกัน Fling & Lock Physics (อิงจาก v3) ]] --
+task.spawn(function()
+    RunService.Heartbeat:Connect(function()
+        if _G.AUTOFUNCTION and LocalPlayer.Character then
+            local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+            local root = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+
+            if humanoid then
+                humanoid.PlatformStand = true
+                humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+            end
+
+            for _, v in pairs(LocalPlayer.Character:GetChildren()) do
+                if v:IsA("BasePart") then
+                    v.CanCollide = false
+                    v.AssemblyLinearVelocity = Vector3.zero
+                    v.AssemblyAngularVelocity = Vector3.zero
+                end
+            end
+        end
+    end)
+end)
+
+
 -- [[ ⚙️ Main Logic ]] --
 task.spawn(BoostFPS)
+
+task.spawn(function()
+    pcall(function()
+        local RS = game:GetService("ReplicatedStorage")
+        RS:WaitForChild("RemoteEvents"):WaitForChild("QuestAccept"):FireServer("HakiQuestNPC")
+    end)
+end)
 
 task.spawn(function()
     while true do 
@@ -539,36 +570,15 @@ task.spawn(function()
             end)
         end
 
-        if _G.HasDarkBlade and not _G.StatResetDone then
-            local meleeStat = LocalPlayer.Data:FindFirstChild("Melee")
-            if meleeStat and meleeStat.Value > 1 then
-                UpdateStatus("🔄 รีเซ็ต Stat เพื่อย้ายไปสายดาบ!", Color3.fromRGB(255, 255, 100))
-                pcall(function()
-                    RS:WaitForChild("RemoteEvents"):WaitForChild("ResetStats"):FireServer()
-                end)
-                task.wait(1.5)
-            end
-            _G.StatResetDone = true
-        end
-
         local targetIsland = GetTargetIsland(currentLevel)
-        
         if targetIsland and _G.CurrentIslandSpawn ~= targetIsland then
             local crystalName = "SpawnPointCrystal_" .. targetIsland
-            local crystalModel = nil
-            
-            for _, v in pairs(workspace:GetDescendants()) do
-                if v.Name == crystalName and v:IsA("Model") then
-                    crystalModel = v
-                    break
-                end
-            end
+            local crystalModel = workspace:FindFirstChild(crystalName, true)
             
             if crystalModel then
                 local crystalPart = crystalModel.PrimaryPart or crystalModel:FindFirstChildWhichIsA("BasePart")
                 if crystalPart then
-                    UpdateStatus("📍 กำลังวาร์ปไปเซ็ตจุดเกิดที่เกาะ: " .. targetIsland, Color3.fromRGB(150, 100, 255))
-                    
+                    UpdateStatus("📍 กำลังวาร์ปไปเซ็ตจุดเกิด...", Color3.fromRGB(150, 100, 255))
                     hrp.CFrame = crystalPart.CFrame * CFrame.new(0, 0, 4)
                     task.wait(1) 
                     
@@ -577,19 +587,9 @@ task.spawn(function()
                         pcall(function()
                             prompt.RequiresLineOfSight = false
                             prompt.MaxActivationDistance = 50
-                            
-                            if fireproximityprompt then
-                                fireproximityprompt(prompt)
-                            else
-                                prompt:InputHoldBegin()
-                                task.wait(prompt.HoldDuration + 0.2)
-                                prompt:InputHoldEnd()
-                            end
+                            if fireproximityprompt then fireproximityprompt(prompt) end
                         end)
-                        
-                        UpdateStatus("💀 เซ็ตจุดเกิดเสร็จสิ้น! กำลังรีเซ็ตตัวละคร...", Color3.fromRGB(255, 50, 50))
                         task.wait(1)
-                        
                         _G.CurrentIslandSpawn = targetIsland
                         hum.Health = 0 
                         task.wait(2)
@@ -600,17 +600,6 @@ task.spawn(function()
         end
 
         local questInfo = getInfoQuest()
-
-        if questInfo and targetIsland then
-            local distToQuest = (hrp.Position - questInfo.position).Magnitude
-            if distToQuest > 6000 then
-                UpdateStatus("⚠️ ระยะทางไกลเกินไป บังคับรีเซ็ตตัวละครเพื่อกลับจุดเกิด!", Color3.fromRGB(255, 100, 100))
-                hum.Health = 0
-                task.wait(2)
-                continue
-            end
-        end
-
         if not questInfo then 
             UpdateStatus("ไม่พบข้อมูลเควส กำลังค้นหา...", Color3.fromRGB(255, 255, 100))
             task.wait(0.5)
@@ -619,16 +608,13 @@ task.spawn(function()
 
         local QuestUI = LocalPlayer.PlayerGui:FindFirstChild("QuestUI")
         local isQuestVisible = QuestUI and QuestUI.Quest.Visible
-        local currentQuestTitle = ""
-        
-        if isQuestVisible then
-            pcall(function() currentQuestTitle = QuestUI.Quest.Quest.Holder.Content.QuestInfo.QuestTitle.QuestTitle.Text end)
-        end
+        local currentQuestTitle = isQuestVisible and QuestUI.Quest.Quest.Holder.Content.QuestInfo.QuestTitle.QuestTitle.Text or ""
 
         if not isQuestVisible then
             UpdateStatus("🚀 ไปรับเควส: " .. questInfo.npcName, Color3.fromRGB(150, 200, 255))
-            tweenPos(CFrame.new(questInfo.position))
-            pcall(function() RS.RemoteEvents.QuestAccept:FireServer(questInfo.npcName) end)
+            tweenPos(CFrame.new(questInfo.position), function()
+                RS.RemoteEvents.QuestAccept:FireServer(questInfo.npcName)
+            end)
             task.wait(0.5)
         elseif currentQuestTitle ~= questInfo.questTitle then
             if string.find(currentQuestTitle, "Haki") then
@@ -639,38 +625,88 @@ task.spawn(function()
                 task.wait(0.5) 
             end
         else
-            if (hrp.Position - questInfo.position).Magnitude >= 50 and isQuestVisible then
-                UpdateStatus("✈️ กำลังไปหา Target...", Color3.fromRGB(200, 150, 255))
-                tweenPos(CFrame.new(questInfo.position))
+            -- ==========================================
+            -- [ ⚔️ ระบบเตรียมความพร้อม อาวุธ / รีเซ็ต Stat / อัป Stat ] 
+            -- ==========================================
+            local gem = LocalPlayer.Data.Gems.Value
+            local money = LocalPlayer.Data.Money.Value
+            local toolName = "Combat"
+            local modes_tats = "Melee"
+            local YPOS = 5.5
+
+            -- 1. เงื่อนไขการซื้อ Dark Blade (รีเซ็ต Stat ก่อนและหลังซื้อตาม v3)
+            if gem >= 150 and money >= 250000 and not checkDarkBlade("Dark Blade") then
+                UpdateStatus("💰 กำลังซื้อ Dark Blade...", Color3.fromRGB(255, 215, 0))
+                pcall(function() RS.RemoteEvents.ResetStats:FireServer() end)
+                task.wait(0.5)
+
+                local npcHRP = workspace:FindFirstChild("ServiceNPCs") and workspace.ServiceNPCs:FindFirstChild("DarkBladeNPC") and workspace.ServiceNPCs.DarkBladeNPC:FindFirstChild("HumanoidRootPart")
+                if npcHRP then
+                    tweenPos(npcHRP.CFrame * CFrame.new(0, 0, 3))
+                    task.wait(1)
+                    local prompt = npcHRP:FindFirstChild("DarkBladeShopPrompt")
+                    if prompt then
+                        prompt.MaxActivationDistance = math.huge
+                        fireproximityprompt(prompt)
+                        task.wait(1)
+                        pcall(function() RS.RemoteEvents.ResetStats:FireServer() end)
+                        task.wait(2)
+                    end
+                end
+                continue -- ข้ามลูปไป 1 รอบเพื่ออัปเดตสถานะของ
             end
-            
+
+            -- 2. เงื่อนไขการถืออาวุธ และ การเช็ครีเซ็ต Stat ระหว่างสาย
+            if checkDarkBlade("Dark Blade") then
+                -- ใส่ดาบดำ
+                if not checkOwnerDarkBlade() then
+                    UpdateStatus("🗡️ กำลังสวมใส่ Dark Blade...", Color3.fromRGB(100, 100, 255))
+                    pcall(function() RS.Remotes.EquipWeapon:FireServer("Equip", "Dark Blade") end)
+                    task.wait(1)
+                end
+                toolName = "Dark Blade"
+                modes_tats = "Sword"
+                YPOS = 8.5
+                
+                -- ตรวจสอบ: ถ้าถือดาบ แต่มีสเตตัสหลงไปอยู่สาย Melee ให้รีเซ็ตทิ้ง
+                local meleeStat = LocalPlayer.Data:FindFirstChild("Melee")
+                if meleeStat and meleeStat.Value > 1 then
+                    UpdateStatus("🔄 รีเซ็ต Stat เพื่อย้ายไปสายดาบ!", Color3.fromRGB(255, 255, 100))
+                    pcall(function() RS.RemoteEvents.ResetStats:FireServer() end)
+                    task.wait(1)
+                end
+            else
+                -- ใส่หมัด
+                toolName = "Combat"
+                modes_tats = "Melee"
+                YPOS = 5.5
+                
+                -- ตรวจสอบ: ถ้าไม่มีดาบ แต่มีสเตตัสหลงไปอยู่สาย Sword ให้รีเซ็ตทิ้ง
+                local swordStat = LocalPlayer.Data:FindFirstChild("Sword")
+                if swordStat and swordStat.Value > 1 then
+                    UpdateStatus("🔄 รีเซ็ต Stat เพื่อย้ายไปสายหมัด!", Color3.fromRGB(255, 255, 100))
+                    pcall(function() RS.RemoteEvents.ResetStats:FireServer() end)
+                    task.wait(1)
+                end
+            end
+
+            -- 3. สั่งอัปสเตตัสและบังคับถืออาวุธเสมอ
+            autoAllocate(modes_tats)
+            local tool = LocalPlayer.Backpack:FindFirstChild(toolName) or char:FindFirstChild(toolName)
+            if tool then hum:EquipTool(tool) end
+
+            -- [ 🎯 ค้นหา Target ] --
             local npcType = getnpcQuest(questInfo.npcName)
             local closest = nil
-            local shortestDist = math.huge
-            local bestScore = 0
 
             for _, v in pairs(workspace.NPCs:GetChildren()) do
                 if v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 then
-                    local targetStr = tostring(npcType):lower():gsub("%s+", "")
-                    local cleanDisplay = v.Humanoid.DisplayName:lower():gsub("%[lv%.%s*%d+%]", ""):gsub("%s+", "")
-                    local cleanName = v.Name:lower():gsub("%s+", "")
-                    local score = 0
-                    
-                    if cleanDisplay == targetStr or cleanName == targetStr then
-                        score = 2 
-                    elseif string.find(cleanDisplay, targetStr, 1, true) or string.find(cleanName, targetStr, 1, true) then
-                        local isTargetBoss = string.find(targetStr, "boss")
-                        local isMobBoss = string.find(cleanDisplay, "boss") or string.find(cleanName, "boss") or string.find(cleanDisplay, "leader")
-                        if isTargetBoss or not isMobBoss then score = 1 end
-                    end
-
-                    if score > 0 then
-                        local dist = (hrp.Position - v.HumanoidRootPart.Position).Magnitude
-                        if score > bestScore or (score == bestScore and dist < shortestDist) then
-                            bestScore = score
-                            shortestDist = dist
-                            closest = v
-                        end
+                    local subName = v.Humanoid.DisplayName:gsub("%s+", ""):gsub("%[Lv%.%s*%d+%]", "")
+                    if npcType == tostring(subName) or v.Name == npcType then
+                        closest = v
+                        break
+                    elseif subName:find(npcType, 1, true) then
+                        closest = v
                     end
                 end
             end
@@ -680,108 +716,29 @@ task.spawn(function()
                 continue 
             end
 
-            local BV = hrp:FindFirstChild("AutoFarmVelocity")
-            if not BV then
-                BV = Instance.new("BodyVelocity")
-                BV.Name = "AutoFarmVelocity"
-                BV.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-                BV.Parent = hrp
-            end
-            BV.Velocity = Vector3.zero
-            
-            -- [[ 🎯 Smart Equip: หาอาวุธที่ถูกต้องมาใส่ให้เสมอ ]]
-            equipBestWeapon()
-            autoAllocate()
-
-            UpdateStatus("(Luring)...", Color3.fromRGB(255, 150, 50))
-            pcall(function()
-                for _, v in pairs(workspace.NPCs:GetChildren()) do
-                    if v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 then
-                        local targetStr = tostring(npcType):lower():gsub("%s+", "")
-                        local cDisp = v.Humanoid.DisplayName:lower():gsub("%[lv%.%s*%d+%]", ""):gsub("%s+", "")
-                        local cName = v.Name:lower():gsub("%s+", "")
-                        local isMatch = false
-                        
-                        if cDisp == targetStr or cName == targetStr then isMatch = true 
-                        elseif string.find(cDisp, targetStr, 1, true) or string.find(cName, targetStr, 1, true) then
-                            local isTargetBoss = string.find(targetStr, "boss")
-                            local isMobBoss = string.find(cDisp, "boss") or string.find(cName, "boss") or string.find(cDisp, "leader")
-                            if isTargetBoss or not isMobBoss then isMatch = true end
-                        end
-
-                        if isMatch then
-                            local mobDist = (hrp.Position - v.HumanoidRootPart.Position).Magnitude
-                            if mobDist < 350 then
-                                if not v:GetAttribute("AggroPulled") then
-                                    hrp.CFrame = v.HumanoidRootPart.CFrame * CFrame.new(0, 5, 0) * CFrame.Angles(math.rad(-90), 0, 0)
-                                    task.wait(0.15) 
-                                    local tool = char:FindFirstChildOfClass("Tool")
-                                    if tool then tool:Activate() end
-                                    RS.CombatSystem.Remotes.RequestHit:FireServer()
-                                    v:SetAttribute("AggroPulled", true)
-                                end
-                                
-                                v.HumanoidRootPart.Size = Vector3.new(30, 30, 30)
-                                v.HumanoidRootPart.Transparency = 0.8
-                                v.HumanoidRootPart.BrickColor = BrickColor.new("White")
-                                v.HumanoidRootPart.Material = Enum.Material.ForceField
-                                v.HumanoidRootPart.CanCollide = false
-                                
-                                if v == closest then
-                                    v.HumanoidRootPart.Anchored = true
-                                else
-                                    v.HumanoidRootPart.Anchored = false
-                                end
-                            end
-                        end
-                    end
-                end
-            end)
-
             UpdateStatus("⚔️ กำลังฟามมอน: " .. tostring(npcType), Color3.fromRGB(100, 255, 100))
 
             repeat 
                 RunService.Heartbeat:Wait() 
-                
-                -- เช็คเงื่อนไขหยุดฟาร์มกลางคัน
                 if not _G.AUTOFUNCTION then break end
-                
-                if not closest or not closest.Parent or not closest:FindFirstChild("HumanoidRootPart") or closest.Humanoid.Health <= 0 or hum.Health <= 0 then
-                    break
-                end
-                
-                local dist = (hrp.Position - closest.HumanoidRootPart.Position).Magnitude
-                if dist > 500 then
-                    break 
+                if not closest or not closest.Parent or not closest:FindFirstChild("HumanoidRootPart") or closest.Humanoid.Health <= 0 or hum.Health <= 0 then break end
+
+                -- [ 🔒 ล็อคมอนสเตอร์ให้อยู่นิ่งๆ ] --
+                local success, owner = pcall(function() return closest.HumanoidRootPart:GetNetworkOwner() end)
+                if success and owner == LocalPlayer then
+                    closest.HumanoidRootPart.CFrame = CFrame.new(closest.HumanoidRootPart.Position)
+                    closest.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+                    closest.HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
                 end
 
-                local targetCFrame = closest.HumanoidRootPart.CFrame * CFrame.new(0, 8, 0) * CFrame.Angles(math.rad(-90), 0, 0)
+                local targetCFrame = CFrame.new(closest.HumanoidRootPart.Position + Vector3.new(0, YPOS, 0)) * CFrame.Angles(math.rad(-90), 0, 0)
                 hrp.CFrame = targetCFrame
                 
                 pcall(function()
-                    local tool = char:FindFirstChildOfClass("Tool")
                     if tool then tool:Activate() end
-                    
                     RS.CombatSystem.Remotes.RequestHit:FireServer()
-                    RS.CombatSystem.Remotes.RequestHit:FireServer()
-                    
-
-                    if not _G.SkillTick or tick() - _G.SkillTick > 2 then -- กดสกิลทุกๆ 2 วินาที
-                        task.spawn(function()
-                            VIM:SendKeyEvent(true, Enum.KeyCode.Z, false, game)
-                            task.wait(0.05)
-                            VIM:SendKeyEvent(false, Enum.KeyCode.Z, false, game)
-                            task.wait(0.2)
-                            VIM:SendKeyEvent(true, Enum.KeyCode.X, false, game)
-                            task.wait(0.05)
-                            VIM:SendKeyEvent(false, Enum.KeyCode.X, false, game)
-                        end)
-                        _G.SkillTick = tick()
-                    end
                 end)
-            until hum.Health <= 0 or not QuestUI.Quest.Visible
-            
-            if BV and BV.Parent then BV:Destroy() end 
+            until hum.Health <= 0 or not QuestUI.Quest.Visible or QuestUI.Quest.Quest.Holder.Content.QuestInfo.QuestTitle.QuestTitle.Text ~= questInfo.questTitle
         end
     end
 end)
