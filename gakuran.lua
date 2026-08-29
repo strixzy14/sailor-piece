@@ -50,7 +50,7 @@ _G.GakuranState = {
     TaskText       = "Waiting for Task...",
     Target         = "Searching...",
     Money          = "¥0",
-    Log            = "Starting bot...",
+    Log            = "<font color='#AAAAAA'>Bot initialized</font>",
     ShiftEarned    = 0,
     RawTaskText    = nil,
     TargetUserId   = nil,
@@ -326,7 +326,7 @@ table.insert(G.Connections, JobState.OnClientEvent:Connect(function(data)
         G.LastShiftKick = os.clock()
     elseif data.Kind == "Paid" then
         G.Action       = "Accepted! +" .. "¥" .. tostring(data.Pay or 0)
-        G.Log          = string.format("<font color='#00FF88'>[DONE] +¥%s (Earned: ¥%s)</font>", tostring(data.Pay or 0), tostring(data.Earned or 0))
+        G.Log          = string.format("<font color='#00FF88'>[DONE] Photo Accepted! (+¥%s)</font>", tostring(data.Pay or 0))
         G.LastSubmitTime = os.clock()
         G.RetryCount   = 0
         G.LastShiftKick = os.clock()
@@ -468,6 +468,7 @@ local function RunCapture()
                     G.LastSubmitTime = os.clock()
                     G.RetryCount = 0
                     G.LastShiftKick = os.clock()
+                    G.Log = string.format("<font color='#00FF88'>[DONE] Captured %s</font>", targetPlayer.DisplayName or targetPlayer.Name)
                     break
                 elseif res == "Cooldown" then
                     task.wait(1.5)
@@ -519,6 +520,7 @@ local function RunCapture()
                     G.LastSubmitTime = os.clock()
                     G.RetryCount = 0
                     G.LastShiftKick = os.clock()
+                    G.Log = string.format("<font color='#00FF88'>[DONE] Captured %s</font>", areaSearch)
                     break
                 elseif res == "Cooldown" then
                     task.wait(1.5)
