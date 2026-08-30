@@ -1,12 +1,12 @@
 --[[
     ══════════════════════════════════════════════════════════════════════════════
-    (学乱) GAKURAN - PRO AUTO PHOTO QUEST & YEN FARM [ULTRA FAST PRO EDITION]
+    (学乱) GAKURAN - PRO AUTO PHOTO QUEST & YEN FARM [PRECISION FLOOR & ELEVATION ENGINE]
     ══════════════════════════════════════════════════════════════════════════════
     MADE BY XDFLEX HUB
     
     Configuration (Set in getgenv() before or with loadstring):
     -----------------------------------------------------------------------------
-    getgenv().Disable3D    = true                  -- Disable 3D Rendering (Black Screen / Max FPS)
+    getgenv().Disable3D    = true                  -- Disable 3D Rendering (Black Screen / Max FPS / No Crash)
     getgenv().AutoPay      = true                  -- Enable / Disable Auto Pay
     getgenv().TargetPay    = "XDFLEX67"            -- Target Yen Tag (without ¥)
     getgenv().PayThreshold = 5000                  -- Min balance before auto sending
@@ -59,6 +59,7 @@ _G.GakuranState = {
     LastRerollTime = 0,
     LastPayTime    = 0,
     LastShiftKick  = os.clock(),
+    LastGCCollect  = os.clock(),
     RetryCount     = 0,
     IsBusy         = false,
 }
@@ -79,9 +80,10 @@ function G.Cleanup()
             if h then pcall(function() h:Destroy() end) end
         end
     end
+    pcall(function() collectgarbage("collect") end)
 end
 
--- 2. EXTREME POTATO GRAPHICS & FPS BOOSTER (DELETES TERRAIN, TEXTURES, SOUNDS & PARTICLES)
+-- 2. SAFE & ULTRA LOW MEMORY OPTIMIZER
 local RS       = game:GetService("RunService")
 local UIS      = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
@@ -89,45 +91,23 @@ local CoreGui  = game:GetService("CoreGui")
 local VU       = game:GetService("VirtualUser")
 
 pcall(function()
-    if setfpscap then setfpscap(60) end
+    if setfpscap then setfpscap(30) end
     settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
     Lighting.GlobalShadows = false
     Lighting.FogEnd = 9e9
-    Lighting.Brightness = 2
-    Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+    Lighting.Brightness = 1
 
-    -- Strip all heavy post-processing effects
     for _, v in ipairs(Lighting:GetChildren()) do
-        if v:IsA("PostProcessEffect") or v:IsA("Atmosphere") or v:IsA("Clouds") or v:IsA("Sky") or v:IsA("BloomEffect") or v:IsA("DepthOfFieldEffect") or v:IsA("ColorCorrectionEffect") or v:IsA("SunRaysEffect") then
-            v:Destroy()
+        if v:IsA("PostProcessEffect") or v:IsA("Atmosphere") or v:IsA("Clouds") or v:IsA("BloomEffect") or v:IsA("DepthOfFieldEffect") or v:IsA("ColorCorrectionEffect") or v:IsA("SunRaysEffect") then
+            v.Enabled = false
         end
     end
 
-    -- Clear terrain voxels completely
-    if workspace.Terrain then
-        pcall(function()
-            workspace.Terrain:Clear()
-        end)
-        workspace.Terrain.WaterWaveSize = 0
-        workspace.Terrain.WaterWaveSpeed = 0
-        workspace.Terrain.WaterReflectance = 0
-        workspace.Terrain.WaterTransparency = 0
-    end
-
-    -- Strip all textures, decals, materials & particle emitters
     for _, v in ipairs(workspace:GetDescendants()) do
         if v:IsA("ParticleEmitter") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Highlight") then
-            v:Destroy()
+            v.Enabled = false
         elseif v:IsA("Decal") or v:IsA("Texture") then
-            v:Destroy()
-        elseif v:IsA("BasePart") and not v:IsA("MeshPart") and v.Name ~= "GakuranSafePlatform" then
-            v.Material = Enum.Material.SmoothPlastic
-            v.Reflectance = 0
-            v.CastShadow = false
-        elseif v:IsA("MeshPart") and v.Name ~= "GakuranSafePlatform" then
-            v.Material = Enum.Material.SmoothPlastic
-            v.Reflectance = 0
-            v.CastShadow = false
+            v.Transparency = 1
         elseif v:IsA("Sound") then
             v.Volume = 0
         end
@@ -202,28 +182,36 @@ local function GoSafe()
     end
 end
 
--- 6. STANDALONE NEWSPAPER JOB & YEN SERVICE LOOKUP
+-- 6. STANDALONE NEWSPAPER JOB & YEN SERVICE LOOKUP (THROTTLED CACHE)
 local NJob = nil
 local YenService = nil
+local lastGCLookupTime = 0
 
 local function RefreshGCLookups()
+    if NJob and YenService then return end
+    local now = os.clock()
+    if (now - lastGCLookupTime) < 30 then return end
+    lastGCLookupTime = now
+
     if not getgc then return end
-    for _, v in ipairs(getgc(true)) do
-        if type(v) == "table" then
-            if not NJob and rawget(v, "GetRegistered") and rawget(v, "GetByKey") then
-                for _, item in ipairs(v.GetRegistered()) do
-                    if item.Key == "SchoolNewspaper" then NJob = item; break end
+    pcall(function()
+        for _, v in ipairs(getgc(true)) do
+            if type(v) == "table" then
+                if not NJob and rawget(v, "GetRegistered") and rawget(v, "GetByKey") then
+                    for _, item in ipairs(v.GetRegistered()) do
+                        if item.Key == "SchoolNewspaper" then NJob = item; break end
+                    end
+                end
+                if not YenService and rawget(v, "_yenAppSubmitSend") then
+                    local uvs = getupvalues(v._yenAppSubmitSend)
+                    if uvs and type(uvs[2]) == "table" then
+                        YenService = uvs[2]
+                    end
                 end
             end
-            if not YenService and rawget(v, "_yenAppSubmitSend") then
-                local uvs = getupvalues(v._yenAppSubmitSend)
-                if uvs and type(uvs[2]) == "table" then
-                    YenService = uvs[2]
-                end
-            end
+            if NJob and YenService then break end
         end
-        if NJob and YenService then break end
-    end
+    end)
 end
 RefreshGCLookups()
 
@@ -231,7 +219,7 @@ local function EnsureShift()
     if not NJob then RefreshGCLookups() end
     if NJob then
         if not NJob.IsActive() then
-            NJob.Start()
+            pcall(function() NJob.Start() end)
             task.wait(0.3)
         end
     end
@@ -260,8 +248,8 @@ local function GetLiveWalletData()
     local tag = ""
 
     if YenService and YenService.GetState then
-        local st = YenService:GetState()
-        if st then
+        local ok, st = pcall(function() return YenService:GetState() end)
+        if ok and st then
             if type(st.Balance) == "number" then bal = st.Balance end
             if type(st.Tag) == "string" then tag = st.Tag end
         end
@@ -406,7 +394,7 @@ table.insert(G.Connections, UIS.InputBegan:Connect(function(inp, gpe)
     end
 end))
 
--- 9. TURBO PRECISION CAPTURE ENGINE
+-- 9. SMART ELEVATION & MULTI-ANGLE ORBIT CAPTURE ENGINE
 local function TrySubmitPhoto(cameraPosition, aimTargetPosition)
     local cf = CFrame.lookAt(cameraPosition, aimTargetPosition)
     local ok, res = pcall(function() return Submit:InvokeServer("Submit", cf) end)
@@ -445,23 +433,32 @@ local function RunCapture()
     if targetPlayer then
         local tChar = targetPlayer.Character
         local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
-        local tHead = tChar and (tChar:FindFirstChild("Head") or tRoot)
 
-        if tRoot and tHead then
+        if tRoot then
             G.Action = "Capturing: " .. (targetPlayer.DisplayName or targetPlayer.Name)
             G.Target = targetPlayer.DisplayName .. " (@" .. targetPlayer.Name .. ")"
 
-            local targetLook = tRoot.CFrame.LookVector
             local aimPos = tRoot.Position + Vector3.new(0, 1.2, 0)
+            local targetPos = tRoot.Position
 
-            for _, cfg in ipairs({
-                {pos = tRoot.Position + targetLook * 5.5 + Vector3.new(0, 0.4, 0)},
-                {pos = tRoot.Position - targetLook * 5.5 + Vector3.new(0, 0.4, 0)},
-                {pos = tRoot.Position + targetLook * 7.0 + Vector3.new(0, 0.5, 0)}
-            }) do
-                r.CFrame = CFrame.new(cfg.pos)
+            -- Test 1: Orbit at target height (6 studs)
+            -- Test 2: Position on ground directly below target (looking upwards at aimPos)
+            local testOffsets = {
+                Vector3.new(0, 0.4, 6),
+                Vector3.new(0, 0.4, -6),
+                Vector3.new(6, 0.4, 0),
+                Vector3.new(-6, 0.4, 0),
+                Vector3.new(0, -6.0, 5),   -- Lower floor below target looking up
+                Vector3.new(0, -10.0, 4)   -- Ground floor below target looking up
+            }
+
+            for _, offset in ipairs(testOffsets) do
+                local standPos = targetPos + offset
+                r.CFrame = CFrame.lookAt(standPos, aimPos)
                 task.wait(0.06)
-                local res = TrySubmitPhoto(r.Position + Vector3.new(0, 1.4, 0), aimPos)
+
+                local camPos = r.Position + Vector3.new(0, 1.4, 0)
+                local res = TrySubmitPhoto(camPos, aimPos)
 
                 if res == "Accepted" then
                     accepted = true
@@ -505,15 +502,25 @@ local function RunCapture()
 
             local areaPos = matchedPart.Position
 
-            for _, offset in ipairs({
-                Vector3.new(0, 1.5, 8),
-                Vector3.new(8, 1.5, 0),
-                Vector3.new(0, 1.5, -8),
+            -- Test 1: Perimeter Orbit around Area center (9 studs)
+            -- Test 2: Positions right below high area ceiling / second floor looking up!
+            local areaOffsets = {
+                Vector3.new(0, 1.5, 9),
+                Vector3.new(9, 1.5, 0),
+                Vector3.new(0, 1.5, -9),
+                Vector3.new(-9, 1.5, 0),
+                Vector3.new(0, -6.0, 6),   -- Underneath elevated area
+                Vector3.new(0, -12.0, 6),  -- Ground level underneath high area
                 Vector3.new(0, 2, 12)
-            }) do
-                r.CFrame = CFrame.new(areaPos + offset)
+            }
+
+            for _, offset in ipairs(areaOffsets) do
+                local standPos = areaPos + offset
+                r.CFrame = CFrame.lookAt(standPos, areaPos)
                 task.wait(0.06)
-                local res = TrySubmitPhoto(r.Position + Vector3.new(0, 1.4, 0), areaPos)
+
+                local camPos = r.Position + Vector3.new(0, 1.4, 0)
+                local res = TrySubmitPhoto(camPos, areaPos)
 
                 if res == "Accepted" then
                     accepted = true
@@ -551,7 +558,7 @@ end
 -- 10. MAIN CONTROLLER LOOP
 local mainThread = task.spawn(function()
     while G.Running do
-        task.wait(0.08)
+        task.wait(0.1)
 
         -- Ingame Rules Modal Bypass
         pcall(function()
@@ -570,7 +577,7 @@ local mainThread = task.spawn(function()
         EnsureShift()
         CheckAndAutoPay()
 
-        -- Instant Task Detection from Ingame Card & GC Target
+        -- Instant Task Detection from Ingame Card (Top Right Assignment)
         local pgui = LP:FindFirstChild("PlayerGui")
         local photoGui = pgui and pgui:FindFirstChild("PhotoJobGui")
         local card = photoGui and photoGui:FindFirstChild("Card")
@@ -578,8 +585,8 @@ local mainThread = task.spawn(function()
         if card then
             local taskLabel = card:FindFirstChild("Task")
             if taskLabel and taskLabel.Text ~= "" then
-                G.TaskText = taskLabel.Text
-                if not G.RawTaskText or G.RawTaskText ~= taskLabel.Text then
+                if G.TaskText ~= taskLabel.Text or not G.RawTaskText or G.RawTaskText ~= taskLabel.Text then
+                    G.TaskText = taskLabel.Text
                     G.RawTaskText = taskLabel.Text
                     G.Target = taskLabel.Text:gsub("get a photo of ", "")
                     G.RetryCount = 0
@@ -625,6 +632,13 @@ local mainThread = task.spawn(function()
                 G.Action = "Waiting for Task..."
                 G.Target = "Searching..."
             end
+        end
+
+        -- Auto Flush Garbage Collection every 45 seconds
+        local now = os.clock()
+        if (now - G.LastGCCollect) > 45 then
+            G.LastGCCollect = now
+            pcall(function() collectgarbage("step", 100) end)
         end
 
         -- Update HUD
