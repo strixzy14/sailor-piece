@@ -1,6 +1,6 @@
 --[[
     ══════════════════════════════════════════════════════════════════════════════
-    (学乱) GAKURAN - PRO AUTO PHOTO QUEST & YEN FARM [PRECISION FLOOR & ELEVATION ENGINE]
+    (学乱) GAKURAN - PRO AUTO PHOTO QUEST & YEN FARM [ZERO MEMORY LEAK EDITION]
     ══════════════════════════════════════════════════════════════════════════════
     MADE BY XDFLEX HUB
     
@@ -22,7 +22,7 @@ end
 local Players = game:GetService("Players")
 local LP = Players.LocalPlayer
 while not LP do
-    task.wait(0.2)
+    task.wait(0.5)
     LP = Players.LocalPlayer
 end
 
@@ -35,10 +35,10 @@ local Submit = Remotes:WaitForChild("PhotoJobSubmit", 20)
 local JobState = Remotes:WaitForChild("PhotoJobState", 20)
 local ReqSit = Remotes:FindFirstChild("RequestSit")
 
--- 1. CLEANUP PREVIOUS RUN (ZERO MEMORY LEAK)
+-- 1. CLEANUP PREVIOUS RUN (STRICT CLEANUP)
 if _G.GakuranState and type(_G.GakuranState.Cleanup) == "function" then
     pcall(_G.GakuranState.Cleanup)
-    task.wait(0.1)
+    task.wait(0.2)
 end
 
 _G.GakuranState = {
@@ -60,6 +60,8 @@ _G.GakuranState = {
     LastPayTime    = 0,
     LastShiftKick  = os.clock(),
     LastGCCollect  = os.clock(),
+    LastHudUpdate  = 0,
+    LastRenderedText = "",
     RetryCount     = 0,
     IsBusy         = false,
 }
@@ -68,7 +70,9 @@ local G = _G.GakuranState
 function G.Cleanup()
     G.Running = false
     for _, c in ipairs(G.Connections) do pcall(function() c:Disconnect() end) end
+    table.clear(G.Connections)
     for _, t in ipairs(G.Threads) do pcall(function() task.cancel(t) end) end
+    table.clear(G.Threads)
     pcall(function() game:GetService("RunService"):Set3dRenderingEnabled(true) end)
     for _, par in ipairs({
         game:GetService("CoreGui"),
@@ -83,7 +87,7 @@ function G.Cleanup()
     pcall(function() collectgarbage("collect") end)
 end
 
--- 2. SAFE & ULTRA LOW MEMORY OPTIMIZER
+-- 2. SAFE LOW-MEMORY ENVIRONMENT
 local RS       = game:GetService("RunService")
 local UIS      = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
@@ -95,48 +99,22 @@ pcall(function()
     settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
     Lighting.GlobalShadows = false
     Lighting.FogEnd = 9e9
-    Lighting.Brightness = 1
 
     for _, v in ipairs(Lighting:GetChildren()) do
         if v:IsA("PostProcessEffect") or v:IsA("Atmosphere") or v:IsA("Clouds") or v:IsA("BloomEffect") or v:IsA("DepthOfFieldEffect") or v:IsA("ColorCorrectionEffect") or v:IsA("SunRaysEffect") then
             v.Enabled = false
         end
     end
-
-    for _, v in ipairs(workspace:GetDescendants()) do
-        if v:IsA("ParticleEmitter") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Highlight") then
-            v.Enabled = false
-        elseif v:IsA("Decal") or v:IsA("Texture") then
-            v.Transparency = 1
-        elseif v:IsA("Sound") then
-            v.Volume = 0
-        end
-    end
 end)
 
--- 3. PERMANENT ANTI-SIT
-pcall(function()
-    for _, d in ipairs(workspace:GetDescendants()) do
-        if d:IsA("Seat") or d:IsA("VehicleSeat") then d.Disabled = true end
-    end
-end)
-
+-- 3. ZERO-LEAK PERMANENT ANTI-SIT (NO DESCENDANT WATCHERS / DIRECT HUMANOID CONTROL)
 local function ForceUnsit(c)
     if not c then return end
     local hum = c:WaitForChild("Humanoid", 5)
     if not hum then return end
-    hum:ChangeState(Enum.HumanoidStateType.Running)
+
+    hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
     hum.Sit = false
-    hum.Jump = true
-    local conn = hum.Seated:Connect(function(s)
-        if s then
-            hum.Sit = false
-            hum:ChangeState(Enum.HumanoidStateType.Running)
-            hum.Jump = true
-            if ReqSit then pcall(function() ReqSit:FireServer(false) end) end
-        end
-    end)
-    table.insert(G.Connections, conn)
     if ReqSit then pcall(function() ReqSit:FireServer(false) end) end
 end
 if LP.Character then ForceUnsit(LP.Character) end
@@ -182,41 +160,44 @@ local function GoSafe()
     end
 end
 
--- 6. STANDALONE NEWSPAPER JOB & YEN SERVICE LOOKUP (THROTTLED CACHE)
+-- 6. STANDALONE NEWSPAPER JOB & YEN SERVICE LOOKUP (ZERO-RETENTION LOOKUP)
 local NJob = nil
 local YenService = nil
-local lastGCLookupTime = 0
 
-local function RefreshGCLookups()
+local function SafeInitialLookup()
     if NJob and YenService then return end
-    local now = os.clock()
-    if (now - lastGCLookupTime) < 30 then return end
-    lastGCLookupTime = now
-
     if not getgc then return end
-    pcall(function()
-        for _, v in ipairs(getgc(true)) do
-            if type(v) == "table" then
-                if not NJob and rawget(v, "GetRegistered") and rawget(v, "GetByKey") then
-                    for _, item in ipairs(v.GetRegistered()) do
-                        if item.Key == "SchoolNewspaper" then NJob = item; break end
+
+    task.spawn(function()
+        pcall(function()
+            local list = getgc(true)
+            if not list then return end
+            for i = 1, #list do
+                local v = list[i]
+                if type(v) == "table" then
+                    if not NJob and rawget(v, "GetRegistered") and rawget(v, "GetByKey") then
+                        for _, item in ipairs(v.GetRegistered()) do
+                            if item.Key == "SchoolNewspaper" then NJob = item; break end
+                        end
+                    end
+                    if not YenService and rawget(v, "_yenAppSubmitSend") then
+                        local uvs = getupvalues(v._yenAppSubmitSend)
+                        if uvs and type(uvs[2]) == "table" then
+                            YenService = uvs[2]
+                        end
                     end
                 end
-                if not YenService and rawget(v, "_yenAppSubmitSend") then
-                    local uvs = getupvalues(v._yenAppSubmitSend)
-                    if uvs and type(uvs[2]) == "table" then
-                        YenService = uvs[2]
-                    end
-                end
+                if NJob and YenService then break end
             end
-            if NJob and YenService then break end
-        end
+            table.clear(list)
+            list = nil
+            collectgarbage("collect")
+        end)
     end)
 end
-RefreshGCLookups()
+SafeInitialLookup()
 
 local function EnsureShift()
-    if not NJob then RefreshGCLookups() end
     if NJob then
         if not NJob.IsActive() then
             pcall(function() NJob.Start() end)
@@ -292,7 +273,6 @@ local function CheckAndAutoPay()
         G.Action = "Auto Paying ¥" .. tostring(payAmount) .. " to @" .. targetTag .. "..."
         G.Log = string.format("<font color='#00E6FF'>[PAY] Sent ¥%s to @%s</font>", tostring(payAmount), targetTag)
         pcall(function()
-            if not YenService then RefreshGCLookups() end
             if YenService and YenService.SendYen then
                 YenService:SendYen(targetTag, payAmount)
             end
@@ -441,15 +421,13 @@ local function RunCapture()
             local aimPos = tRoot.Position + Vector3.new(0, 1.2, 0)
             local targetPos = tRoot.Position
 
-            -- Test 1: Orbit at target height (6 studs)
-            -- Test 2: Position on ground directly below target (looking upwards at aimPos)
             local testOffsets = {
                 Vector3.new(0, 0.4, 6),
                 Vector3.new(0, 0.4, -6),
                 Vector3.new(6, 0.4, 0),
                 Vector3.new(-6, 0.4, 0),
-                Vector3.new(0, -6.0, 5),   -- Lower floor below target looking up
-                Vector3.new(0, -10.0, 4)   -- Ground floor below target looking up
+                Vector3.new(0, -6.0, 5),
+                Vector3.new(0, -10.0, 4)
             }
 
             for _, offset in ipairs(testOffsets) do
@@ -484,7 +462,7 @@ local function RunCapture()
         local hb = workspace:FindFirstChild("AreaHitboxes")
         local matchedPart = nil
         if hb and areaSearch then
-            for _, d in ipairs(hb:GetDescendants()) do
+            for _, d in ipairs(hb:GetChildren()) do
                 if d:IsA("BasePart") then
                     local n = d.Name:lower()
                     local a = areaSearch:lower()
@@ -502,15 +480,13 @@ local function RunCapture()
 
             local areaPos = matchedPart.Position
 
-            -- Test 1: Perimeter Orbit around Area center (9 studs)
-            -- Test 2: Positions right below high area ceiling / second floor looking up!
             local areaOffsets = {
                 Vector3.new(0, 1.5, 9),
                 Vector3.new(9, 1.5, 0),
                 Vector3.new(0, 1.5, -9),
                 Vector3.new(-9, 1.5, 0),
-                Vector3.new(0, -6.0, 6),   -- Underneath elevated area
-                Vector3.new(0, -12.0, 6),  -- Ground level underneath high area
+                Vector3.new(0, -6.0, 6),
+                Vector3.new(0, -12.0, 6),
                 Vector3.new(0, 2, 12)
             }
 
@@ -555,16 +531,16 @@ local function RunCapture()
     G.IsBusy = false
 end
 
--- 10. MAIN CONTROLLER LOOP
+-- 10. MAIN CONTROLLER LOOP (ZERO LEAK / CONSTANT RAM PROFILE)
 local mainThread = task.spawn(function()
     while G.Running do
-        task.wait(0.1)
+        task.wait(0.15)
 
         -- Ingame Rules Modal Bypass
         pcall(function()
             local pgui = LP:FindFirstChild("PlayerGui")
             local rules = pgui and pgui:FindFirstChild("RulesScreenGui")
-            if rules then
+            if rules and rules.Enabled then
                 local btn = rules:FindFirstChild("AgreeButton", true)
                 if btn and btn:IsA("GuiButton") and getconnections then
                     for _, c in ipairs(getconnections(btn.MouseButton1Click)) do c:Fire() end
@@ -573,6 +549,14 @@ local mainThread = task.spawn(function()
                 rules.Enabled = false
             end
         end)
+
+        -- Instant Anti-Sit Enforcement (Humanoid State)
+        local hum = LP.Character and LP.Character:FindFirstChild("Humanoid")
+        if hum and hum.Sit then
+            hum.Sit = false
+            hum:ChangeState(Enum.HumanoidStateType.Running)
+            if ReqSit then pcall(function() ReqSit:FireServer(false) end) end
+        end
 
         EnsureShift()
         CheckAndAutoPay()
@@ -634,16 +618,17 @@ local mainThread = task.spawn(function()
             end
         end
 
-        -- Auto Flush Garbage Collection every 45 seconds
+        -- Active Garbage Collector Cycle every 20 seconds
         local now = os.clock()
-        if (now - G.LastGCCollect) > 45 then
+        if (now - G.LastGCCollect) > 20 then
             G.LastGCCollect = now
-            pcall(function() collectgarbage("step", 100) end)
+            pcall(function() collectgarbage("collect") end)
         end
 
-        -- Update HUD
-        pcall(function()
-            Txt.Text = string.format(
+        -- Diff-Based HUD Update (Only formats text when state ACTUALLY changes)
+        if (now - G.LastHudUpdate) >= 0.5 then
+            G.LastHudUpdate = now
+            local newText = string.format(
                 "<font color='#00E6FF' size='14'><b>MADE BY XDFLEX HUB</b></font>\n" ..
                 "<font color='#AAAAAA'>Task:   </font> <font color='#FFFFFF'>%s</font>\n" ..
                 "<font color='#AAAAAA'>Action: </font> <font color='#00E6A0'>%s</font>\n" ..
@@ -656,7 +641,11 @@ local mainThread = task.spawn(function()
                 G.Money,
                 G.Log
             )
-        end)
+            if newText ~= G.LastRenderedText then
+                G.LastRenderedText = newText
+                pcall(function() Txt.Text = newText end)
+            end
+        end
     end
 end)
 table.insert(G.Threads, mainThread)
