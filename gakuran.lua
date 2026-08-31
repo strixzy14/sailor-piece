@@ -41,15 +41,18 @@ local function HandleFirstTimeProfileCreation()
             local chosenName = randomNames[math.random(1, #randomNames)]
             local chosenGender = (math.random(1, 2) == 1) and "Male" or "Female"
 
-            -- 1. Try Direct Remote Submit
+            -- 1. Direct Remote Submit with proper Table dictionary payload
             local submitProfile = Remotes:FindFirstChild("SubmitProfile")
             if submitProfile and submitProfile:IsA("RemoteFunction") then
                 pcall(function()
-                    submitProfile:InvokeServer(chosenName, chosenGender)
+                    submitProfile:InvokeServer({
+                        FirstName = chosenName,
+                        Gender = chosenGender
+                    })
                 end)
             end
 
-            -- 2. GUI Fallback Click
+            -- 2. GUI Complete Automation & Confirm
             local canvasGroup = profileSetup:FindFirstChild("CanvasGroup")
             local mainFrame = canvasGroup and canvasGroup:FindFirstChild("Frame")
             if mainFrame then
@@ -63,7 +66,12 @@ local function HandleFirstTimeProfileCreation()
                 local textBox = mainFrame:FindFirstChild("TextBox", true)
                 if textBox then
                     textBox.Text = chosenName
+                    if getconnections then
+                        for _, c in ipairs(getconnections(textBox.FocusLost)) do c:Fire(true) end
+                    end
                 end
+
+                task.wait(0.2)
 
                 local confirmBtn = mainFrame:FindFirstChild("TextButton", true)
                 if confirmBtn and getconnections then
@@ -71,7 +79,13 @@ local function HandleFirstTimeProfileCreation()
                     for _, c in ipairs(getconnections(confirmBtn.Activated)) do c:Fire() end
                 end
             end
-            task.wait(1.5)
+
+            -- Loop wait until ProfileSetup is closed/destroyed
+            local startWait = os.clock()
+            while profileSetup and profileSetup.Parent and (os.clock() - startWait) < 5 do
+                task.wait(0.3)
+                profileSetup = pgui:FindFirstChild("ProfileSetup")
+            end
         end
     end)
 end
