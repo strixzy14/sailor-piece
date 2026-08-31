@@ -27,7 +27,7 @@ end
 local RepS = game:GetService("ReplicatedStorage")
 local Remotes = RepS:WaitForChild("Remotes", 30)
 
--- First-Time Profile Creation Auto-Handler
+-- First-Time Profile Creation Auto-Handler (100% Automated Confirmation)
 local function HandleFirstTimeProfileCreation()
     pcall(function()
         local pgui = LP:WaitForChild("PlayerGui", 10)
@@ -41,48 +41,48 @@ local function HandleFirstTimeProfileCreation()
             local chosenName = randomNames[math.random(1, #randomNames)]
             local chosenGender = (math.random(1, 2) == 1) and "Male" or "Female"
 
-            -- 1. Direct Remote Submit with proper Table dictionary payload
-            local submitProfile = Remotes:FindFirstChild("SubmitProfile")
-            if submitProfile and submitProfile:IsA("RemoteFunction") then
-                pcall(function()
-                    submitProfile:InvokeServer({
-                        FirstName = chosenName,
-                        Gender = chosenGender
-                    })
-                end)
+            -- 1. Click Gender Button in UI to set internal state upvalue (Gender)
+            local genderBtn = profileSetup:FindFirstChild(chosenGender, true)
+            if genderBtn and getconnections then
+                for _, c in ipairs(getconnections(genderBtn.MouseButton1Click)) do c:Fire() end
+                for _, c in ipairs(getconnections(genderBtn.Activated)) do c:Fire() end
             end
 
-            -- 2. GUI Complete Automation & Confirm
-            local canvasGroup = profileSetup:FindFirstChild("CanvasGroup")
-            local mainFrame = canvasGroup and canvasGroup:FindFirstChild("Frame")
-            if mainFrame then
-                local genderContainer = mainFrame:FindFirstChild("Frame")
-                local genderBtn = genderContainer and genderContainer:FindFirstChild(chosenGender)
-                if genderBtn and getconnections then
-                    for _, c in ipairs(getconnections(genderBtn.MouseButton1Click)) do c:Fire() end
-                    for _, c in ipairs(getconnections(genderBtn.Activated)) do c:Fire() end
+            -- 2. Fill Name into TextBox
+            local textBox = profileSetup:FindFirstChild("TextBox", true)
+            if textBox then
+                textBox.Text = chosenName
+                if getconnections then
+                    for _, c in ipairs(getconnections(textBox.FocusLost)) do c:Fire(true) end
                 end
+            end
 
-                local textBox = mainFrame:FindFirstChild("TextBox", true)
-                if textBox then
-                    textBox.Text = chosenName
-                    if getconnections then
-                        for _, c in ipairs(getconnections(textBox.FocusLost)) do c:Fire(true) end
-                    end
+            task.wait(0.2)
+
+            -- 3. Execute ProfileServiceClient's exact internal Confirm function
+            local confirmBtn = profileSetup:FindFirstChild("TextButton", true)
+            local innerSubmitFn = nil
+            if confirmBtn and getconnections then
+                local conns = getconnections(confirmBtn.MouseButton1Click)
+                if conns and conns[1] and conns[1].Function then
+                    pcall(function()
+                        innerSubmitFn = debug.getupvalue(conns[1].Function, 2)
+                    end)
                 end
+            end
 
-                task.wait(0.2)
-
-                local confirmBtn = mainFrame:FindFirstChild("TextButton", true)
+            if innerSubmitFn and type(innerSubmitFn) == "function" then
+                pcall(innerSubmitFn)
+            else
                 if confirmBtn and getconnections then
                     for _, c in ipairs(getconnections(confirmBtn.MouseButton1Click)) do c:Fire() end
                     for _, c in ipairs(getconnections(confirmBtn.Activated)) do c:Fire() end
                 end
             end
 
-            -- Loop wait until ProfileSetup is closed/destroyed
+            -- 4. Wait until Character and Game fully load and ProfileSetup is closed
             local startWait = os.clock()
-            while profileSetup and profileSetup.Parent and (os.clock() - startWait) < 5 do
+            while profileSetup and profileSetup.Parent and (os.clock() - startWait) < 6 do
                 task.wait(0.3)
                 profileSetup = pgui:FindFirstChild("ProfileSetup")
             end
