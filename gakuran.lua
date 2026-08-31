@@ -9,8 +9,8 @@
     getgenv().Disable3D    = true                  -- Disable 3D Rendering (Black Screen / Max FPS / No Crash)
     getgenv().AutoPay      = true                  -- Enable / Disable Auto Pay
     getgenv().TargetPay    = "XDFLEX67"            -- Target Yen Tag (without ¥)
-    getgenv().PayThreshold = 5000                  -- Min balance before auto sending
-    getgenv().PayAmount    = 5000                  -- Amount of Yen to send per transfer
+    getgenv().PayThreshold = 5000                  -- Min balance before auto sending (e.g. 5000)
+    getgenv().PayAmount    = "all"                 -- Amount to send: e.g. 5000 or "all" to send everything!
     -----------------------------------------------------------------------------
 --]]
 
@@ -353,8 +353,8 @@ local function CheckAndAutoPay()
     local genv = (getgenv and getgenv()) or _G
     local autoPayEnabled = genv.AutoPay or genv.targetpay ~= nil or genv.TargetPay ~= nil
     local targetTag = genv.TargetPay or genv.targetpay
-    local payAmount = tonumber(genv.PayAmount or genv.amount or genv.payamount or 5000) or 5000
-    local threshold = tonumber(genv.PayThreshold or genv.threshold or payAmount) or payAmount
+    local rawPayAmount = genv.PayAmount or genv.amount or genv.payamount
+    local rawThreshold = genv.PayThreshold or genv.threshold
 
     if not autoPayEnabled or not targetTag or targetTag == "" then return end
     targetTag = targetTag:gsub("^¥", ""):gsub("^%s*(.-)%s*$", "%1")
@@ -368,7 +368,28 @@ local function CheckAndAutoPay()
         return
     end
 
-    if currentBal >= threshold and currentBal >= payAmount and payAmount >= 10 then
+    -- Determine threshold
+    local threshold = 5000
+    if rawThreshold then
+        threshold = tonumber(rawThreshold) or 5000
+    elseif type(rawPayAmount) == "number" then
+        threshold = rawPayAmount
+    end
+
+    -- Determine pay amount ('all', 'max', or fixed number)
+    local payAmount = 0
+    local isAll = false
+    if type(rawPayAmount) == "string" and (rawPayAmount:lower() == "all" or rawPayAmount:lower() == "max") then
+        isAll = true
+        payAmount = currentBal
+    else
+        payAmount = tonumber(rawPayAmount or 5000) or 5000
+        if payAmount > currentBal then
+            payAmount = currentBal
+        end
+    end
+
+    if currentBal >= threshold and payAmount >= 10 then
         G.LastPayTime = now
         G.Action = "Auto Paying ¥" .. tostring(payAmount) .. " to @" .. targetTag .. "..."
         G.Log = string.format("<font color='#00E6FF'>[PAY] Sent ¥%s to @%s</font>", tostring(payAmount), targetTag)
