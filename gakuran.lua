@@ -1,6 +1,6 @@
 --[[
     ══════════════════════════════════════════════════════════════════════════════
-    (学乱) GAKURAN - PRO AUTO PHOTO QUEST & YEN FARM [ZERO MEMORY LEAK EDITION]
+    (学乱) GAKURAN - PRO AUTO PHOTO QUEST & YEN FARM [TURBO SPEED & AIR FREEZE]
     ══════════════════════════════════════════════════════════════════════════════
     MADE BY XDFLEX HUB
     
@@ -14,28 +14,89 @@
     -----------------------------------------------------------------------------
 --]]
 
--- 0. SMART LOAD GUARD
-if not game:IsLoaded() then
-    game.Loaded:Wait()
-end
+-- 0. SMART LOAD & INITIALIZATION GUARD
+repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
-local LP = Players.LocalPlayer
+local LP = Players.LocalPlayer or Players.PlayerAdded:Wait()
 while not LP do
     task.wait(0.5)
     LP = Players.LocalPlayer
 end
 
-local char = LP.Character or LP.CharacterAdded:Wait()
-local root = char:WaitForChild("HumanoidRootPart", 20)
-
 local RepS = game:GetService("ReplicatedStorage")
-local Remotes = RepS:WaitForChild("Remotes", 20)
+local Remotes = RepS:WaitForChild("Remotes", 30)
+
+-- First-Time Profile Creation Auto-Handler
+local function HandleFirstTimeProfileCreation()
+    pcall(function()
+        local pgui = LP:WaitForChild("PlayerGui", 10)
+        local profileSetup = pgui and pgui:FindFirstChild("ProfileSetup")
+        if profileSetup and profileSetup.Enabled then
+            local randomNames = {
+                "Ren", "Haruto", "Yuto", "Sota", "Yuki", "Riku", "Kaito", "Takumi", "Shoma", "Daiki",
+                "Yui", "Rio", "Hina", "Aoi", "Rin", "Miyu", "Yuna", "Sakura", "Nanami", "Mei",
+                "Kazuya", "Kenji", "Shin", "Tatsuya", "Ryoma", "Akira", "Kazuma", "Hayato", "Koki"
+            }
+            local chosenName = randomNames[math.random(1, #randomNames)]
+            local chosenGender = (math.random(1, 2) == 1) and "Male" or "Female"
+
+            -- 1. Try Direct Remote Submit
+            local submitProfile = Remotes:FindFirstChild("SubmitProfile")
+            if submitProfile and submitProfile:IsA("RemoteFunction") then
+                pcall(function()
+                    submitProfile:InvokeServer(chosenName, chosenGender)
+                end)
+            end
+
+            -- 2. GUI Fallback Click
+            local canvasGroup = profileSetup:FindFirstChild("CanvasGroup")
+            local mainFrame = canvasGroup and canvasGroup:FindFirstChild("Frame")
+            if mainFrame then
+                local genderContainer = mainFrame:FindFirstChild("Frame")
+                local genderBtn = genderContainer and genderContainer:FindFirstChild(chosenGender)
+                if genderBtn and getconnections then
+                    for _, c in ipairs(getconnections(genderBtn.MouseButton1Click)) do c:Fire() end
+                    for _, c in ipairs(getconnections(genderBtn.Activated)) do c:Fire() end
+                end
+
+                local textBox = mainFrame:FindFirstChild("TextBox", true)
+                if textBox then
+                    textBox.Text = chosenName
+                end
+
+                local confirmBtn = mainFrame:FindFirstChild("TextButton", true)
+                if confirmBtn and getconnections then
+                    for _, c in ipairs(getconnections(confirmBtn.MouseButton1Click)) do c:Fire() end
+                    for _, c in ipairs(getconnections(confirmBtn.Activated)) do c:Fire() end
+                end
+            end
+            task.wait(1.5)
+        end
+    end)
+end
+HandleFirstTimeProfileCreation()
+
+-- 1. รอ Character, Humanoid และ RootPart ให้โหลดสมบูรณ์
+local Character = LP.Character or LP.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid", 30)
+local Root = Character:WaitForChild("HumanoidRootPart", 30)
+
+-- 2. รอจนกว่าระบบเกมจะปล่อยการควบคุม (WalkSpeed > 0 และ CameraType == Custom)
+repeat 
+    task.wait(0.5) 
+    Character = LP.Character or Character
+    Humanoid = Character and Character:FindFirstChild("Humanoid") or Humanoid
+until Humanoid and Humanoid.WalkSpeed > 0 and workspace.CurrentCamera and workspace.CurrentCamera.CameraType == Enum.CameraType.Custom
+
+-- 3. หน่วงเซฟตี้กันเหนียวเพื่อให้เกมโหลด Remotes & Environment เสร็จ 100%
+task.wait(4.5)
+
 local Submit = Remotes:WaitForChild("PhotoJobSubmit", 20)
 local JobState = Remotes:WaitForChild("PhotoJobState", 20)
 local ReqSit = Remotes:FindFirstChild("RequestSit")
 
--- 1. CLEANUP PREVIOUS RUN (STRICT CLEANUP)
+-- 1. CLEANUP PREVIOUS RUN (STRICT ZERO-LEAK CLEANUP)
 if _G.GakuranState and type(_G.GakuranState.Cleanup) == "function" then
     pcall(_G.GakuranState.Cleanup)
     task.wait(0.2)
@@ -58,6 +119,7 @@ _G.GakuranState = {
     LastSubmitTime = 0,
     LastRerollTime = 0,
     LastPayTime    = 0,
+    LastTagCheck   = 0,
     LastShiftKick  = os.clock(),
     LastGCCollect  = os.clock(),
     LastHudUpdate  = 0,
@@ -87,7 +149,7 @@ function G.Cleanup()
     pcall(function() collectgarbage("collect") end)
 end
 
--- 2. SAFE LOW-MEMORY ENVIRONMENT
+-- 2. ULTRA-LOW MEMORY OPTIMIZER & 15 FPS CAP (CLOUD PHONE / PC BULLETPROOF)
 local RS       = game:GetService("RunService")
 local UIS      = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
@@ -95,7 +157,9 @@ local CoreGui  = game:GetService("CoreGui")
 local VU       = game:GetService("VirtualUser")
 
 pcall(function()
-    if setfpscap then setfpscap(30) end
+    if setfpscap then 
+        setfpscap(15)
+    end
     settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
     Lighting.GlobalShadows = false
     Lighting.FogEnd = 9e9
@@ -107,7 +171,7 @@ pcall(function()
     end
 end)
 
--- 3. ZERO-LEAK PERMANENT ANTI-SIT (NO DESCENDANT WATCHERS / DIRECT HUMANOID CONTROL)
+-- 3. ZERO-LEAK PERMANENT ANTI-SIT
 local function ForceUnsit(c)
     if not c then return end
     local hum = c:WaitForChild("Humanoid", 5)
@@ -156,11 +220,13 @@ end
 local function GoSafe()
     local r = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
     if r then
+        r.AssemblyLinearVelocity = Vector3.zero
+        r.AssemblyAngularVelocity = Vector3.zero
         r.CFrame = CFrame.new(SafePos + Vector3.new(0, 2, 0))
     end
 end
 
--- 6. STANDALONE NEWSPAPER JOB & YEN SERVICE LOOKUP (ZERO-RETENTION LOOKUP)
+-- 6. STANDALONE NEWSPAPER JOB & YEN SERVICE LOOKUP
 local NJob = nil
 local YenService = nil
 
@@ -201,14 +267,14 @@ local function EnsureShift()
     if NJob then
         if not NJob.IsActive() then
             pcall(function() NJob.Start() end)
-            task.wait(0.3)
+            task.wait(0.2)
         end
     end
 end
 
 local function Reroll(reason)
     local now = os.clock()
-    if now - G.LastRerollTime < 1.5 then return end
+    if now - G.LastRerollTime < 1.0 then return end
     G.LastRerollTime = now
     G.Action = "Rerolling..."
     G.Log = string.format("<font color='#FF5555'>[SKIP] %s</font>", reason or "Stuck / Missing")
@@ -216,9 +282,9 @@ local function Reroll(reason)
     G.RawTaskText = nil
     if NJob then
         pcall(function() NJob.Stop() end)
-        task.wait(0.2)
+        task.wait(0.15)
         pcall(function() NJob.Start() end)
-        task.wait(0.3)
+        task.wait(0.2)
     end
     GoSafe()
 end
@@ -246,6 +312,26 @@ local function GetLiveWalletData()
     end
 
     return bal, tag
+end
+
+-- AUTO CLAIM YEN TAG (IF ACCOUNT DOES NOT HAVE A TAG YET)
+local function EnsureYenTag()
+    local now = os.clock()
+    if (now - G.LastTagCheck) < 10 then return end
+    G.LastTagCheck = now
+
+    if not YenService or not YenService.GetTag or not YenService.ClaimTag then return end
+
+    local currentTag = ""
+    pcall(function() currentTag = YenService:GetTag() or "" end)
+
+    if currentTag == "" or currentTag == nil or currentTag == "none" then
+        local randomTag = "XD" .. tostring(math.random(10, 99)) .. string.char(math.random(65, 90)) .. tostring(math.random(100, 999))
+        pcall(function()
+            YenService:ClaimTag(randomTag)
+            G.Log = string.format("<font color='#00E6FF'>[TAG] Claimed @%s</font>", randomTag)
+        end)
+    end
 end
 
 -- AUTO PAY
@@ -374,7 +460,7 @@ table.insert(G.Connections, UIS.InputBegan:Connect(function(inp, gpe)
     end
 end))
 
--- 9. SMART ELEVATION & MULTI-ANGLE ORBIT CAPTURE ENGINE
+-- 9. TURBO PRECISION ENGINE & AIR-FREEZE SNAPSHOT
 local function TrySubmitPhoto(cameraPosition, aimTargetPosition)
     local cf = CFrame.lookAt(cameraPosition, aimTargetPosition)
     local ok, res = pcall(function() return Submit:InvokeServer("Submit", cf) end)
@@ -418,25 +504,30 @@ local function RunCapture()
             G.Action = "Capturing: " .. (targetPlayer.DisplayName or targetPlayer.Name)
             G.Target = targetPlayer.DisplayName .. " (@" .. targetPlayer.Name .. ")"
 
-            local aimPos = tRoot.Position + Vector3.new(0, 1.2, 0)
-            local targetPos = tRoot.Position
+            local targetLook = tRoot.CFrame.LookVector
+            local targetRight = tRoot.CFrame.RightVector
+            local aimPos = tRoot.Position + Vector3.new(0, 0.5, 0)
 
-            local testOffsets = {
-                Vector3.new(0, 0.4, 6),
-                Vector3.new(0, 0.4, -6),
-                Vector3.new(6, 0.4, 0),
-                Vector3.new(-6, 0.4, 0),
-                Vector3.new(0, -6.0, 5),
-                Vector3.new(0, -10.0, 4)
+            local playerTestAngles = {
+                {pos = tRoot.Position + targetLook * 6.0, aim = aimPos},                          -- 1. Front (6.0 studs)
+                {pos = tRoot.Position + targetLook * 5.0 + Vector3.new(0, 0.2, 0), aim = aimPos}, -- 2. Close Front
+                {pos = tRoot.Position + targetRight * 5.5, aim = aimPos},                         -- 3. Right
+                {pos = tRoot.Position - targetRight * 5.5, aim = aimPos},                         -- 4. Left
+                {pos = tRoot.Position - targetLook * 5.5, aim = aimPos},                          -- 5. Rear
+                {pos = tRoot.Position + targetLook * 7.5, aim = aimPos},                          -- 6. Long shot
+                {pos = tRoot.Position + Vector3.new(0, -6.0, 4.5), aim = aimPos},                 -- 7. Look Up
+                {pos = tRoot.Position + Vector3.new(0, -10.0, 4.0), aim = aimPos}                 -- 8. Ground Look Up
             }
 
-            for _, offset in ipairs(testOffsets) do
-                local standPos = targetPos + offset
-                r.CFrame = CFrame.lookAt(standPos, aimPos)
-                task.wait(0.06)
+            for _, test in ipairs(playerTestAngles) do
+                -- Velocity Zero Freeze in Air
+                r.AssemblyLinearVelocity = Vector3.zero
+                r.AssemblyAngularVelocity = Vector3.zero
+                r.CFrame = CFrame.lookAt(test.pos, test.aim)
+                task.wait(0.08)
 
                 local camPos = r.Position + Vector3.new(0, 1.4, 0)
-                local res = TrySubmitPhoto(camPos, aimPos)
+                local res = TrySubmitPhoto(camPos, test.aim)
 
                 if res == "Accepted" then
                     accepted = true
@@ -446,7 +537,7 @@ local function RunCapture()
                     G.Log = string.format("<font color='#00FF88'>[DONE] Captured %s</font>", targetPlayer.DisplayName or targetPlayer.Name)
                     break
                 elseif res == "Cooldown" then
-                    task.wait(1.5)
+                    task.wait(1.0)
                     break
                 end
             end
@@ -459,16 +550,42 @@ local function RunCapture()
     -- 2. RESOLVE AREA TARGET
     else
         local areaSearch = G.TargetArea or cleanTarget
+        areaSearch = areaSearch:gsub("^the ", ""):gsub("^%s*(.-)%s*$", "%1")
         local hb = workspace:FindFirstChild("AreaHitboxes")
         local matchedPart = nil
-        if hb and areaSearch then
-            for _, d in ipairs(hb:GetChildren()) do
+
+        if hb and areaSearch ~= "" then
+            local aLow = areaSearch:lower()
+            for _, d in ipairs(hb:GetDescendants()) do
                 if d:IsA("BasePart") then
-                    local n = d.Name:lower()
-                    local a = areaSearch:lower()
-                    if n == a or n:find(a, 1, true) or a:find(n, 1, true) then
+                    local nLow = d.Name:lower()
+                    if nLow == aLow then
                         matchedPart = d
                         break
+                    end
+                end
+            end
+            if not matchedPart then
+                for _, d in ipairs(hb:GetDescendants()) do
+                    if d:IsA("BasePart") then
+                        local nLow = d.Name:lower()
+                        if nLow:find(aLow, 1, true) or aLow:find(nLow, 1, true) then
+                            matchedPart = d
+                            break
+                        end
+                    end
+                end
+            end
+        end
+
+        if not matchedPart and areaSearch ~= "" then
+            local aLow = areaSearch:lower()
+            for _, d in ipairs(workspace:GetChildren()) do
+                if d:IsA("BasePart") or d:IsA("Model") then
+                    local nLow = d.Name:lower()
+                    if nLow == aLow or nLow:find(aLow, 1, true) or aLow:find(nLow, 1, true) then
+                        matchedPart = d:IsA("Model") and (d.PrimaryPart or d:FindFirstChildWhichIsA("BasePart")) or d
+                        if matchedPart then break end
                     end
                 end
             end
@@ -480,23 +597,25 @@ local function RunCapture()
 
             local areaPos = matchedPart.Position
 
-            local areaOffsets = {
-                Vector3.new(0, 1.5, 9),
-                Vector3.new(9, 1.5, 0),
-                Vector3.new(0, 1.5, -9),
-                Vector3.new(-9, 1.5, 0),
-                Vector3.new(0, -6.0, 6),
-                Vector3.new(0, -12.0, 6),
-                Vector3.new(0, 2, 12)
+            local areaAngles = {
+                {pos = areaPos + Vector3.new(0, 1.5, 9.0), aim = areaPos},
+                {pos = areaPos + Vector3.new(9.0, 1.5, 0), aim = areaPos},
+                {pos = areaPos + Vector3.new(0, 1.5, -9.0), aim = areaPos},
+                {pos = areaPos + Vector3.new(-9.0, 1.5, 0), aim = areaPos},
+                {pos = areaPos + Vector3.new(0, 2.0, 12.0), aim = areaPos},
+                {pos = areaPos + Vector3.new(0, -6.0, 6.0), aim = areaPos},
+                {pos = areaPos + Vector3.new(0, -11.0, 5.0), aim = areaPos}
             }
 
-            for _, offset in ipairs(areaOffsets) do
-                local standPos = areaPos + offset
-                r.CFrame = CFrame.lookAt(standPos, areaPos)
-                task.wait(0.06)
+            for _, test in ipairs(areaAngles) do
+                -- Velocity Zero Freeze in Air
+                r.AssemblyLinearVelocity = Vector3.zero
+                r.AssemblyAngularVelocity = Vector3.zero
+                r.CFrame = CFrame.lookAt(test.pos, test.aim)
+                task.wait(0.08)
 
                 local camPos = r.Position + Vector3.new(0, 1.4, 0)
-                local res = TrySubmitPhoto(camPos, areaPos)
+                local res = TrySubmitPhoto(camPos, test.aim)
 
                 if res == "Accepted" then
                     accepted = true
@@ -506,7 +625,7 @@ local function RunCapture()
                     G.Log = string.format("<font color='#00FF88'>[DONE] Captured %s</font>", areaSearch)
                     break
                 elseif res == "Cooldown" then
-                    task.wait(1.5)
+                    task.wait(1.0)
                     break
                 end
             end
@@ -521,20 +640,20 @@ local function RunCapture()
 
     if not accepted then
         G.RetryCount = G.RetryCount + 1
-        if G.RetryCount >= 3 then
-            Reroll("Target Stuck After 3 Tries")
+        if G.RetryCount >= 5 then
+            Reroll("Target Stuck After 5 Tries")
         else
-            G.Action = "Safezone (Retrying " .. tostring(G.RetryCount) .. "/3)..."
+            G.Action = "Safezone (Retrying " .. tostring(G.RetryCount) .. "/5)..."
         end
     end
 
     G.IsBusy = false
 end
 
--- 10. MAIN CONTROLLER LOOP (ZERO LEAK / CONSTANT RAM PROFILE)
+-- 10. MAIN CONTROLLER LOOP (TURBO 0.05S DISPATCH)
 local mainThread = task.spawn(function()
     while G.Running do
-        task.wait(0.15)
+        task.wait(0.05)
 
         -- Ingame Rules Modal Bypass
         pcall(function()
@@ -550,7 +669,7 @@ local mainThread = task.spawn(function()
             end
         end)
 
-        -- Instant Anti-Sit Enforcement (Humanoid State)
+        -- Instant Anti-Sit Enforcement
         local hum = LP.Character and LP.Character:FindFirstChild("Humanoid")
         if hum and hum.Sit then
             hum.Sit = false
@@ -559,6 +678,7 @@ local mainThread = task.spawn(function()
         end
 
         EnsureShift()
+        EnsureYenTag()
         CheckAndAutoPay()
 
         -- Instant Task Detection from Ingame Card (Top Right Assignment)
@@ -579,8 +699,8 @@ local mainThread = task.spawn(function()
             end
         end
 
-        -- Anti-Stuck Auto Kick: If stuck in "Waiting for Task..." for >5 seconds, force restart shift!
-        if (not G.RawTaskText or G.RawTaskText == "") and (os.clock() - G.LastShiftKick) > 5 then
+        -- Anti-Stuck Auto Kick: If stuck in "Waiting for Task..." for >4 seconds, force restart shift!
+        if (not G.RawTaskText or G.RawTaskText == "") and (os.clock() - G.LastShiftKick) > 4 then
             G.LastShiftKick = os.clock()
             Reroll("Shift Stalled (No Task Assigned)")
         end
@@ -601,13 +721,13 @@ local mainThread = task.spawn(function()
             end
         end)
 
-        -- Fast Dispatch Controller
+        -- Fast Dispatch Controller (Turbo Cooldown 1.0s)
         if G.RawTaskText and G.RawTaskText ~= "" then
             local now = os.clock()
-            if (now - G.LastSubmitTime) >= 1.5 and not G.IsBusy then
+            if (now - G.LastSubmitTime) >= 1.0 and not G.IsBusy then
                 task.spawn(RunCapture)
-            elseif not G.IsBusy and (now - G.LastSubmitTime) < 1.5 then
-                local cd = math.max(0, 1.5 - (now - G.LastSubmitTime))
+            elseif not G.IsBusy and (now - G.LastSubmitTime) < 1.0 then
+                local cd = math.max(0, 1.0 - (now - G.LastSubmitTime))
                 G.Action = string.format("Safezone (CD: %.1fs)", cd)
             end
         else
@@ -625,7 +745,7 @@ local mainThread = task.spawn(function()
             pcall(function() collectgarbage("collect") end)
         end
 
-        -- Diff-Based HUD Update (Only formats text when state ACTUALLY changes)
+        -- Diff-Based HUD Update
         if (now - G.LastHudUpdate) >= 0.5 then
             G.LastHudUpdate = now
             local newText = string.format(
