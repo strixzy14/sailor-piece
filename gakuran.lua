@@ -723,6 +723,67 @@ local mainThread = task.spawn(function()
             end
         end)
 
+        -- 3-TIER AUTO RESPAWN / RESTART YOUR HEART HANDLER
+        pcall(function()
+            local pgui = LP:FindFirstChild("PlayerGui")
+            local deathUI = pgui and pgui:FindFirstChild("DeathUI")
+            if deathUI and deathUI.Enabled then
+                G.Action = "Reviving / Restarting Heart..."
+
+                -- 1. Direct Click Simulation on HeartButton (MouseButton1Click / Activated)
+                local heartBtn = deathUI:FindFirstChild("HeartButton", true)
+                if heartBtn and getconnections then
+                    for _, c in ipairs(getconnections(heartBtn.MouseButton1Click)) do c:Fire() end
+                    for _, c in ipairs(getconnections(heartBtn.Activated)) do c:Fire() end
+                end
+
+                -- 2. Direct Server Revive Remote Invocation
+                local reviveRemote = Remotes:FindFirstChild("Revive")
+                if reviveRemote and reviveRemote:IsA("RemoteEvent") then
+                    pcall(function() reviveRemote:FireServer() end)
+                end
+
+                local spawnReq = Remotes:FindFirstChild("SpawnRequest")
+                if spawnReq and spawnReq:IsA("RemoteEvent") then
+                    pcall(function() spawnReq:FireServer() end)
+                end
+
+                -- 3. Check if revived, close UI and clear visual death effects
+                local hum = LP.Character and LP.Character:FindFirstChild("Humanoid")
+                if hum and hum.Health > 0 then
+                    deathUI.Enabled = false
+
+                    -- Clear Camera Death ColorCorrection
+                    local cam = workspace.CurrentCamera
+                    if cam then
+                        for _, v in ipairs(cam:GetChildren()) do
+                            if v:IsA("ColorCorrectionEffect") or v:IsA("BlurEffect") or v.Name:lower():find("death") then
+                                v.Enabled = false
+                                pcall(function() v:Destroy() end)
+                            end
+                        end
+                    end
+
+                    -- Clear Lighting Blurs
+                    for _, v in ipairs(Lighting:GetChildren()) do
+                        if v:IsA("BlurEffect") or v.Name == "ScreenEffectsBlur" or (v:IsA("ColorCorrectionEffect") and v.Name:lower():find("death")) then
+                            v.Enabled = false
+                        end
+                    end
+
+                    -- Clear ScreenEffects Overlay
+                    local screenEffects = pgui and pgui:FindFirstChild("ScreenEffects")
+                    if screenEffects then
+                        for _, v in ipairs(screenEffects:GetChildren()) do
+                            if v:IsA("Frame") then
+                                v.Visible = false
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+
         -- Instant Anti-Sit Enforcement
         local hum = LP.Character and LP.Character:FindFirstChild("Humanoid")
         if hum and hum.Sit then
