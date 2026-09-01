@@ -358,7 +358,7 @@ local function EnsureYenTag()
     end
 end
 
--- AUTO PAY
+-- AUTO PAY (MAX 100,000 YEN PER TRANSACTION HANDLER)
 local function CheckAndAutoPay()
     local genv = (getgenv and getgenv()) or _G
     local autoPayEnabled = genv.AutoPay or genv.targetpay ~= nil or genv.TargetPay ~= nil
@@ -370,7 +370,7 @@ local function CheckAndAutoPay()
     targetTag = targetTag:gsub("^¥", ""):gsub("^%s*(.-)%s*$", "%1")
 
     local now = os.clock()
-    if (now - G.LastPayTime) < 5 then return end
+    if (now - G.LastPayTime) < 1.5 then return end
 
     if not YenService then
         SafeInitialLookup()
@@ -390,15 +390,15 @@ local function CheckAndAutoPay()
         threshold = rawPayAmount
     end
 
-    -- Determine pay amount ('all', 'max', or fixed number)
+    -- Determine pay amount with 100,000 Yen per-transaction limit
+    local MAX_PAY_PER_TRANSACTION = 100000
     local payAmount = 0
     if type(rawPayAmount) == "string" and (rawPayAmount:lower() == "all" or rawPayAmount:lower() == "max") then
-        payAmount = currentBal
+        -- Send in chunks up to 100k per transfer
+        payAmount = math.min(currentBal, MAX_PAY_PER_TRANSACTION)
     else
-        payAmount = tonumber(rawPayAmount or 5000) or 5000
-        if payAmount > currentBal then
-            payAmount = currentBal
-        end
+        local desired = tonumber(rawPayAmount or 5000) or 5000
+        payAmount = math.min(desired, currentBal, MAX_PAY_PER_TRANSACTION)
     end
 
     if currentBal >= threshold and payAmount >= 10 then
@@ -414,7 +414,6 @@ local function CheckAndAutoPay()
                 G.Log = string.format("<font color='#FF5555'>[PAY ERR] %s</font>", tostring(err))
             end
         else
-            -- If YenService instance still missing, trigger re-lookup immediately!
             SafeInitialLookup()
         end
     end
