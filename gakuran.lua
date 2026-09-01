@@ -1,6 +1,6 @@
 --[[
     ══════════════════════════════════════════════════════════════════════════════
-    (学乱) GAKURAN - PRO AUTO PHOTO QUEST & YEN FARM [TURBO SPEED & AIR FREEZE]
+    (学乱) GAKURAN - PRO AUTO PHOTO QUEST & YEN FARM [PRECISION AUTOPAY & FAST FARM]
     ══════════════════════════════════════════════════════════════════════════════
     MADE BY XDFLEX HUB
     
@@ -245,35 +245,35 @@ local NJob = nil
 local YenService = nil
 
 local function SafeInitialLookup()
-    if NJob and YenService then return end
     if not getgc then return end
 
-    task.spawn(function()
-        pcall(function()
-            local list = getgc(true)
-            if not list then return end
-            for i = 1, #list do
-                local v = list[i]
-                if type(v) == "table" then
-                    if not NJob and rawget(v, "GetRegistered") and rawget(v, "GetByKey") then
-                        for _, item in ipairs(v.GetRegistered()) do
-                            if item.Key == "SchoolNewspaper" then NJob = item; break end
-                        end
-                    end
-                    if not YenService and rawget(v, "_yenAppSubmitSend") then
-                        local uvs = getupvalues(v._yenAppSubmitSend)
-                        if uvs and type(uvs[2]) == "table" then
-                            YenService = uvs[2]
-                        end
-                    end
+    local list = getgc(true)
+    if not list then return end
+    for i = 1, #list do
+        local v = list[i]
+        if type(v) == "table" then
+            -- 1. Newspaper Job
+            if not NJob and rawget(v, "GetRegistered") and rawget(v, "GetByKey") then
+                for _, item in ipairs(v.GetRegistered()) do
+                    if item.Key == "SchoolNewspaper" then NJob = item; break end
                 end
-                if NJob and YenService then break end
             end
-            table.clear(list)
-            list = nil
-            collectgarbage("collect")
-        end)
-    end)
+            -- 2. Direct YenAppService Instance Lookup
+            if not YenService then
+                local meta = getmetatable(v)
+                if meta and meta.__index and type(meta.__index) == "table" then
+                    if rawget(meta.__index, "SendYen") and rawget(meta.__index, "ClaimTag") and rawget(meta.__index, "GetTag") then
+                        YenService = v
+                    end
+                elseif rawget(v, "SendYen") and rawget(v, "ClaimTag") and rawget(v, "GetTag") then
+                    YenService = v
+                end
+            end
+        end
+        if NJob and YenService then break end
+    end
+    table.clear(list)
+    list = nil
 end
 SafeInitialLookup()
 
@@ -283,6 +283,8 @@ local function EnsureShift()
             pcall(function() NJob.Start() end)
             task.wait(0.2)
         end
+    else
+        SafeInitialLookup()
     end
 end
 
@@ -308,12 +310,17 @@ local function GetLiveWalletData()
     local bal = 0
     local tag = ""
 
-    if YenService and YenService.GetState then
-        local ok, st = pcall(function() return YenService:GetState() end)
-        if ok and st then
-            if type(st.Balance) == "number" then bal = st.Balance end
-            if type(st.Tag) == "string" then tag = st.Tag end
-        end
+    if not YenService then
+        SafeInitialLookup()
+    end
+
+    if YenService then
+        pcall(function()
+            local st = YenService:GetState()
+            if st and type(st.Balance) == "number" then bal = st.Balance end
+            local tg = YenService:GetTag()
+            if type(tg) == "string" then tag = tg end
+        end)
     end
 
     if bal == 0 then
@@ -331,9 +338,12 @@ end
 -- AUTO CLAIM YEN TAG (IF ACCOUNT DOES NOT HAVE A TAG YET)
 local function EnsureYenTag()
     local now = os.clock()
-    if (now - G.LastTagCheck) < 10 then return end
+    if (now - G.LastTagCheck) < 6 then return end
     G.LastTagCheck = now
 
+    if not YenService then
+        SafeInitialLookup()
+    end
     if not YenService or not YenService.GetTag or not YenService.ClaimTag then return end
 
     local currentTag = ""
@@ -362,6 +372,10 @@ local function CheckAndAutoPay()
     local now = os.clock()
     if (now - G.LastPayTime) < 5 then return end
 
+    if not YenService then
+        SafeInitialLookup()
+    end
+
     local currentBal, currentTag = GetLiveWalletData()
 
     if currentTag ~= "" and currentTag:lower() == targetTag:lower() then
@@ -378,9 +392,7 @@ local function CheckAndAutoPay()
 
     -- Determine pay amount ('all', 'max', or fixed number)
     local payAmount = 0
-    local isAll = false
     if type(rawPayAmount) == "string" and (rawPayAmount:lower() == "all" or rawPayAmount:lower() == "max") then
-        isAll = true
         payAmount = currentBal
     else
         payAmount = tonumber(rawPayAmount or 5000) or 5000
@@ -390,14 +402,21 @@ local function CheckAndAutoPay()
     end
 
     if currentBal >= threshold and payAmount >= 10 then
-        G.LastPayTime = now
-        G.Action = "Auto Paying ¥" .. tostring(payAmount) .. " to @" .. targetTag .. "..."
-        G.Log = string.format("<font color='#00E6FF'>[PAY] Sent ¥%s to @%s</font>", tostring(payAmount), targetTag)
-        pcall(function()
-            if YenService and YenService.SendYen then
+        if YenService and YenService.SendYen then
+            G.LastPayTime = now
+            G.Action = "Auto Paying ¥" .. tostring(payAmount) .. " to @" .. targetTag .. "..."
+            local ok, err = pcall(function()
                 YenService:SendYen(targetTag, payAmount)
+            end)
+            if ok then
+                G.Log = string.format("<font color='#00E6FF'>[PAY] Sent ¥%s to @%s</font>", tostring(payAmount), targetTag)
+            else
+                G.Log = string.format("<font color='#FF5555'>[PAY ERR] %s</font>", tostring(err))
             end
-        end)
+        else
+            -- If YenService instance still missing, trigger re-lookup immediately!
+            SafeInitialLookup()
+        end
     end
 end
 
