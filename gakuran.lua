@@ -391,7 +391,7 @@ local function CheckAndAutoPay()
     end
 
     -- Determine pay amount with 100,000 Yen per-transaction limit
-    local MAX_PAY_PER_TRANSACTION = 100000
+    local MAX_PAY_PER_TRANSACTION = 250000
     local payAmount = 0
     if type(rawPayAmount) == "string" and (rawPayAmount:lower() == "all" or rawPayAmount:lower() == "max") then
         -- Send in chunks up to 100k per transfer
