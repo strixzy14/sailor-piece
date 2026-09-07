@@ -1,18 +1,19 @@
 --[[
     ══════════════════════════════════════════════════════════════════════════════
-    (学乱) GAKURAN - PRO AUTO PHOTO FARM [MAX SUCCESS RATE v5.0]
+    (学乱) GAKURAN - PRO AUTO PHOTO FARM [MAX SUCCESS RATE v5.2]
     ══════════════════════════════════════════════════════════════════════════════
     MADE BY XDFLEX HUB
 
-    WHAT'S NEW IN v5.0:
-      ★ 100% Guaranteed Target Resolution: Uses internal MarkerClient upvalues
-        & BillboardGui nameplate matching for exact UserId resolution!
-      ★ Smart Anti-Lock Cooldown: Calibrated 0.5s submission pacing to prevent
-        server cooldown locks.
-      ★ Precision Sweet-Spot Geometry: Teleports straight to the target's frontal
-        eye-level sweet spot (5.5 studs, chest focus) with instant "Accepted" triggers!
-      ★ Instant Safe-Reroll: Detects missing targets immediately & rerolls shifts
-        without lagging or idling.
+    WHAT'S NEW IN v5.2 (PERFECT ZERO-STUCK FIX):
+      ★ Anchor 3D Fallback: If player Character/HumanoidRootPart is missing
+        or underground, automatically teleports to the game's internal
+        `PhotoJobMarkerClient._anchor` position! Zero "Target Unreachable" stuck!
+      ★ Smart Reroll Sync: Blacklists unresolvable tasks so the UI doesn't
+        loop-feed the dead task back into the bot.
+      ★ Force Reroll on Target Offline: Instantly skips offline players
+        without wasting 4 retry cycles.
+      ★ Instant "Accepted" Geometry: Frontal sweet-spot 5.5 studs aiming
+        at chest level (+0.5 Y offset).
 --]]
 
 -- ══════════════════════════════════════════════════════════════════════════════
@@ -116,6 +117,7 @@ _G.GakuranState = {
     LastRenderedText = "",
     RetryCount       = 0,
     IsBusy           = false,
+    BlacklistedTask  = nil,
 }
 local G = _G.GakuranState
 
@@ -382,7 +384,7 @@ end
 SafeInitialLookup()
 
 -- ══════════════════════════════════════════════════════════════════════════════
--- 7. SHIFT MANAGEMENT & RAPID REROLL
+-- 7. SHIFT MANAGEMENT & PERFECT REROLL
 -- ══════════════════════════════════════════════════════════════════════════════
 local function EnsureShift()
     if NJob then
@@ -396,15 +398,25 @@ local function Reroll(reason)
     local now = os.clock()
     if now - G.LastRerollTime < 1.0 then return end
     G.LastRerollTime = now
+
+    -- Blacklist current task so main loop won't immediately re-read it from Card UI
+    if G.RawTaskText and G.RawTaskText ~= "" then
+        G.BlacklistedTask = G.RawTaskText
+    end
+
     G.RetryCount     = 0
     G.RawTaskText    = nil
     G.TargetUserId   = nil
     G.TargetArea     = nil
     G.Action         = "Rerolling..."
     G.Log            = string.format("<font color='#FF5555'>[SKIP] %s</font>", reason or "Stuck")
+    G.LastShiftKick  = os.clock()
+
     if NJob then
-        pcall(function() NJob.Stop() end); task.wait(0.15)
-        pcall(function() NJob.Start() end); task.wait(0.2)
+        pcall(function() NJob.Stop() end)
+        task.wait(0.2)
+        pcall(function() NJob.Start() end)
+        task.wait(0.3)
     end
     GoSafe()
 end
@@ -494,42 +506,46 @@ end
 table.insert(G.Connections, JobState.OnClientEvent:Connect(function(data)
     if type(data) ~= "table" then return end
     if data.Kind == "Task" then
-        G.RawTaskText  = data.Text or ""
-        G.TaskText     = data.Text or "get a photo"
-        G.TargetUserId = data.TargetUserId or nil
-        G.TargetArea   = data.Area or nil
-        G.Target       = data.Label or data.Area or (data.Text and data.Text:gsub("get a photo of ", "")) or "Unknown"
-        G.RetryCount   = 0
-        G.Action       = "New Task!"
-        G.LastShiftKick = os.clock()
+        G.RawTaskText     = data.Text or ""
+        G.TaskText        = data.Text or "get a photo"
+        G.TargetUserId    = data.TargetUserId or nil
+        G.TargetArea      = data.Area or nil
+        G.Target          = data.Label or data.Area or (data.Text and data.Text:gsub("get a photo of ", "")) or "Unknown"
+        G.RetryCount      = 0
+        G.Action          = "New Task!"
+        G.BlacklistedTask = nil
+        G.LastShiftKick   = os.clock()
     elseif data.Kind == "Paid" then
-        G.Action        = "Accepted! +¥" .. tostring(data.Pay or 0)
-        G.Log           = string.format("<font color='#00FF88'>[DONE] Photo Accepted! (+¥%s)</font>", tostring(data.Pay or 0))
-        G.LastSubmitTime = os.clock()
-        G.RetryCount    = 0
-        G.LastShiftKick = os.clock()
+        G.Action          = "Accepted! +¥" .. tostring(data.Pay or 0)
+        G.Log             = string.format("<font color='#00FF88'>[DONE] Photo Accepted! (+¥%s)</font>", tostring(data.Pay or 0))
+        G.LastSubmitTime  = os.clock()
+        G.RetryCount      = 0
+        G.BlacklistedTask = nil
+        G.LastShiftKick   = os.clock()
     end
 end))
 
--- Helper: Get exact active target from PhotoJobMarkerClient in GC
-local function GetMarkerClientTarget()
-    if not getgc then return nil end
+-- Helper: Get exact active target and 3D anchor from PhotoJobMarkerClient in GC
+local function GetMarkerClientData()
+    if not getgc then return nil, nil end
     local list = getgc(true)
-    if not list then return nil end
-    local found = nil
+    if not list then return nil, nil end
+    local foundTarget = nil
+    local foundAnchor = nil
     for i = 1, #list do
         local v = list[i]
         if type(v) == "table" and rawget(v, "_target") and rawget(v, "_connection") then
-            found = rawget(v, "_target")
+            foundTarget = rawget(v, "_target")
+            foundAnchor = rawget(v, "_anchor")
             break
         end
     end
     table.clear(list)
-    return found
+    return foundTarget, foundAnchor
 end
 
 -- ══════════════════════════════════════════════════════════════════════════════
--- 10. MAX SUCCESS RATE PHOTO CAPTURE ENGINE (v5.0)
+-- 10. MAX SUCCESS RATE PHOTO CAPTURE ENGINE (v5.2)
 -- ══════════════════════════════════════════════════════════════════════════════
 local function TrySubmitPhoto(camPos, aimPos)
     local cf = CFrame.lookAt(camPos, aimPos)
@@ -548,14 +564,14 @@ local function RunCapture()
     local accepted = false
     local cleanTarget = G.RawTaskText:gsub("get a photo of ", ""):gsub("^the ", ""):gsub("^%s*(.-)%s*$", "%1")
 
-    -- ── 1. Resolve Target Player via 4-Layer Hierarchy ──
+    -- ── 1. Resolve Target Player & Anchor via Multi-Tier Hierarchy ──
     local targetPlayer = nil
+    local markerTarget, markerAnchor = GetMarkerClientData()
 
-    -- Layer 1: MarkerClient Target from Game Memory (100% accurate!)
-    local marker = GetMarkerClientTarget()
-    if marker and marker.UserId then
-        G.TargetUserId = marker.UserId
-        targetPlayer = Players:GetPlayerByUserId(marker.UserId)
+    -- Layer 1: Memory Target from MarkerClient (100% accurate)
+    if markerTarget and markerTarget.UserId then
+        G.TargetUserId = markerTarget.UserId
+        targetPlayer = Players:GetPlayerByUserId(markerTarget.UserId)
     end
 
     -- Layer 2: Cached TargetUserId from RemoteEvent
@@ -595,33 +611,49 @@ local function RunCapture()
         end
     end
 
+    -- Check if target is explicitly a player task (indicated by "photo of [Name]" or Kind == "Player")
+    local isPlayerTask = (markerTarget and markerTarget.Kind == "Player") or (G.TargetUserId ~= nil) or (G.RawTaskText:find("get a photo of ") ~= nil and not G.TargetArea)
+
     -- ── 2. Execution ──
-    if targetPlayer then
-        local tChar = targetPlayer.Character
+    if targetPlayer or (isPlayerTask and markerAnchor) then
+        local tChar = targetPlayer and targetPlayer.Character
         local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
-        if not tRoot then
-            Reroll("Player Left or Respawning")
+
+        -- If target left or has no character, check if markerAnchor exists
+        local aimP = nil
+        local tL = Vector3.new(0, 0, -1)
+        local tR = Vector3.new(1, 0, 0)
+
+        if tRoot then
+            aimP = tRoot.Position + Vector3.new(0, 0.5, 0)
+            tL = tRoot.CFrame.LookVector
+            tR = tRoot.CFrame.RightVector
+        elseif markerAnchor and markerAnchor:IsA("BasePart") then
+            -- Fallback to game's active marker anchor
+            aimP = markerAnchor.Position + Vector3.new(0, 0.5, 0)
+            tL = markerAnchor.CFrame.LookVector
+            tR = markerAnchor.CFrame.RightVector
+        else
+            -- Target player has completely left server and no anchor exists -> Immediate reroll!
+            Reroll("Target Player Left Server")
             G.IsBusy = false
             return
         end
 
-        G.Action = "Capturing: " .. (targetPlayer.DisplayName or targetPlayer.Name)
-        G.Target = (cleanTarget ~= "" and cleanTarget) or (targetPlayer.DisplayName .. " (@" .. targetPlayer.Name .. ")")
+        local targetDisplayName = targetPlayer and (targetPlayer.DisplayName or targetPlayer.Name) or cleanTarget
+        G.Action = "Capturing: " .. targetDisplayName
+        G.Target = targetDisplayName
 
-        local tL   = tRoot.CFrame.LookVector
-        local tR   = tRoot.CFrame.RightVector
-        local aimP = tRoot.Position + Vector3.new(0, 0.5, 0)
+        local originPos = tRoot and tRoot.Position or markerAnchor.Position
 
-        -- High-probability Sweet-Spot Geometry (Frontal bias, calibrated 5.0 - 6.5 studs)
+        -- High-probability Sweet-Spot Geometry (Calibrated 5.5 studs front/flank)
         local angles = {
-            {tRoot.Position + tL * 5.5,                          aimP}, -- Sweet Spot #1 (Front Center)
-            {tRoot.Position + tL * 6.5,                          aimP}, -- Sweet Spot #2 (Front Mid)
-            {tRoot.Position + tL * 4.8 + Vector3.new(0, 0.3, 0), aimP}, -- Sweet Spot #3 (Front Eye-level)
-            {tRoot.Position + tR * 5.5,                          aimP}, -- Angle #4 (Right Flank)
-            {tRoot.Position - tR * 5.5,                          aimP}, -- Angle #5 (Left Flank)
-            {tRoot.Position - tL * 5.5,                          aimP}, -- Angle #6 (Rear Center)
-            {tRoot.Position + tL * 8.0,                          aimP}, -- Angle #7 (Long Shot)
-            {tRoot.Position + Vector3.new(0, -6.0, 4.5),         aimP}, -- Angle #8 (Underground Stealth)
+            {originPos + tL * 5.5,                          aimP}, -- Sweet Spot #1 (Front Center)
+            {originPos + tL * 6.5,                          aimP}, -- Sweet Spot #2 (Front Mid)
+            {originPos + tL * 4.8 + Vector3.new(0, 0.3, 0), aimP}, -- Sweet Spot #3 (Front Eye-level)
+            {originPos + tR * 5.5,                          aimP}, -- Angle #4 (Right Flank)
+            {originPos - tR * 5.5,                          aimP}, -- Angle #5 (Left Flank)
+            {originPos - tL * 5.5,                          aimP}, -- Angle #6 (Rear Center)
         }
 
         for _, a in ipairs(angles) do
@@ -635,20 +667,27 @@ local function RunCapture()
                 accepted = true
                 G.LastSubmitTime = os.clock()
                 G.RetryCount = 0
+                G.BlacklistedTask = nil
                 G.LastShiftKick = os.clock()
-                G.Log = string.format("<font color='#00FF88'>[DONE] Captured %s</font>", cleanTarget or targetPlayer.DisplayName)
+                G.Log = string.format("<font color='#00FF88'>[DONE] Captured %s</font>", targetDisplayName)
                 break
             elseif res == "Cooldown" then
-                task.wait(0.55) -- Cooldown recovery
+                task.wait(0.55)
             end
         end
-    else
+
+    elseif not isPlayerTask then
         -- Area Landmark Capture
         local areaSearch = (G.TargetArea or cleanTarget):gsub("^the ", ""):gsub("^%s*(.-)%s*$", "%1")
         local matchedPart = nil
 
+        -- Check game's marker anchor first (if this was an area landmark job)
+        if markerAnchor and markerAnchor:IsA("BasePart") then
+            matchedPart = markerAnchor
+        end
+
         local hb = workspace:FindFirstChild("AreaHitboxes")
-        if hb and areaSearch ~= "" then
+        if not matchedPart and hb and areaSearch ~= "" then
             local aLow = areaSearch:lower()
             for _, d in ipairs(hb:GetDescendants()) do
                 if d:IsA("BasePart") and d.Name:lower() == aLow then matchedPart = d; break end
@@ -705,6 +744,7 @@ local function RunCapture()
                 accepted = true
                 G.LastSubmitTime = os.clock()
                 G.RetryCount = 0
+                G.BlacklistedTask = nil
                 G.LastShiftKick = os.clock()
                 G.Log = string.format("<font color='#00FF88'>[DONE] Captured %s</font>", areaSearch)
                 break
@@ -712,15 +752,20 @@ local function RunCapture()
                 task.wait(0.55)
             end
         end
+    else
+        -- Was a player task but neither player nor anchor was found -> Skip immediately!
+        Reroll("Target Player Not in Server")
+        G.IsBusy = false
+        return
     end
 
     GoSafe()
     if not accepted then
         G.RetryCount = G.RetryCount + 1
-        if G.RetryCount >= 4 then
-            Reroll("Target Unreachable / Out of Range")
+        if G.RetryCount >= 3 then
+            Reroll("Target Unreachable (Auto-Skipping)")
         else
-            G.Action = "Safezone (Retry " .. tostring(G.RetryCount) .. "/4)..."
+            G.Action = "Safezone (Retry " .. tostring(G.RetryCount) .. "/3)..."
         end
     end
     G.IsBusy = false
@@ -864,18 +909,21 @@ local mainThread = task.spawn(function()
 
         EnsureShift(); EnsureYenTag(); CheckAndAutoPay()
 
-        -- Read photo task card
+        -- Read photo task card from UI (guarded against blacklisted dead tasks)
         local pgui     = LP:FindFirstChild("PlayerGui")
         local photoGui = pgui and pgui:FindFirstChild("PhotoJobGui")
         local card     = photoGui and photoGui:FindFirstChild("Card")
         if card then
             local taskLabel = card:FindFirstChild("Task")
-            if taskLabel and taskLabel.Text ~= "" and G.RawTaskText ~= taskLabel.Text then
-                G.TaskText      = taskLabel.Text
-                G.RawTaskText   = taskLabel.Text
-                G.Target        = taskLabel.Text:gsub("get a photo of ", "")
-                G.RetryCount    = 0
-                G.LastShiftKick = os.clock()
+            if taskLabel and taskLabel.Text ~= "" then
+                local currentCardText = taskLabel.Text
+                if G.RawTaskText ~= currentCardText and currentCardText ~= G.BlacklistedTask then
+                    G.TaskText      = currentCardText
+                    G.RawTaskText   = currentCardText
+                    G.Target        = currentCardText:gsub("get a photo of ", "")
+                    G.RetryCount    = 0
+                    G.LastShiftKick = os.clock()
+                end
             end
         end
 
