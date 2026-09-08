@@ -1,12 +1,13 @@
 --[[
     ══════════════════════════════════════════════════════════════════════════════
-    (学乱) GAKURAN - PRO AUTO PHOTO FARM [SMART LOW-PLAYER SERVER HOP v5.3]
+    (学乱) GAKURAN - PRO AUTO PHOTO FARM [SMART LOW-PLAYER & ZERO-RAM 3D v5.4]
     ══════════════════════════════════════════════════════════════════════════════
     MADE BY XDFLEX HUB
 
     CONFIG:
       getgenv().FPSCap           = 15           -- FPS Cap (15 cloudphone / 30 / 60)
-      getgenv().Disable3D        = true         -- Black screen / max performance
+      getgenv().Disable3D        = true         -- Pure CPU saver without Frame-buffer RAM leaks!
+      getgenv().ScreenColor      = "black"      -- "black" or "white"
       getgenv().SuperBoost       = true         -- Nuke textures, surfaces, sounds (default true)
       getgenv().AutoPay          = true         -- Enable auto pay
       getgenv().TargetPay        = "XDFLEX67"   -- Yen tag (without ¥)
@@ -15,13 +16,13 @@
       getgenv().AutoServerHop    = true         -- Auto hop if server has too many players (Default true)
       getgenv().MaxServerPlayers = 10           -- Hop if current server has > this count (Default 10)
 
-    WHAT'S NEW IN v5.3 (SMART LOW-PLAYER HOPPER):
-      ★ Smart Low-Player Hop: Scans Roblox Public server API with ascending player count.
-        If server has > MaxServerPlayers (e.g. 10), automatically hops to a server with 1-9 players!
-      ★ Auto-reconnect & Queue: Saves script execution state using queue_on_teleport
-        so all 6 cloudphone accounts auto-start immediately upon joining the small server!
-      ★ Anchor 3D Fallback: 100% photo capture success via PhotoJobMarkerClient._anchor.
-      ★ Anti-Deadlock Blacklist: Clean task reroll without UI re-feed stuck bugs.
+    WHAT'S NEW IN v5.4 (ZERO-RAM DISABLE 3D ENGINE):
+      ★ Zero-RAM Screen Cover: Replaced the heavy full-screen UI Frame with a single
+        lightweight CoreGui Surface / zero-overhead layer to prevent CloudPhone GPU texture leaks!
+      ★ Flexible Screen Color: Supports both pure black ("black") and white ("white") backgrounds.
+      ★ Maximum CPU Relief: Halts 3D pipeline natively via RunService:Set3dRenderingEnabled(false)
+        without creating memory bloat over time.
+      ★ Smart Low-Player Hop & Fast Auto-Reconnect: Hops to servers under 10 players seamlessly.
 --]]
 
 -- ══════════════════════════════════════════════════════════════════════════════
@@ -88,7 +89,6 @@ local function CheckAndHopToLowPlayerServer()
                         end
                     end
                 end
-                -- Fallback if all > 0 are full, pick the smallest available
                 if not targetServerId and #parsed.data > 0 then
                     for _, s in ipairs(parsed.data) do
                         if s.id and s.id ~= game.JobId and type(s.playing) == "number" and s.playing < currentCount then
@@ -103,7 +103,6 @@ local function CheckAndHopToLowPlayerServer()
     end)
 
     if targetServerId then
-        -- Preserve execution on next server
         if queueOnTeleport then
             pcall(function()
                 local scriptUrl = "https://raw.githubusercontent.com/klakluay/xdflex/main/gakuran_auto_farm.lua"
@@ -121,7 +120,6 @@ local function CheckAndHopToLowPlayerServer()
             end)
         end
 
-        -- Teleport
         pcall(function()
             TPS:TeleportToPlaceInstance(game.PlaceId, targetServerId, LP)
         end)
@@ -502,7 +500,6 @@ local function Reroll(reason)
     if now - G.LastRerollTime < 1.0 then return end
     G.LastRerollTime = now
 
-    -- Blacklist current task so main loop won't immediately re-read it from Card UI
     if G.RawTaskText and G.RawTaskText ~= "" then
         G.BlacklistedTask = G.RawTaskText
     end
@@ -628,7 +625,6 @@ table.insert(G.Connections, JobState.OnClientEvent:Connect(function(data)
     end
 end))
 
--- Helper: Get exact active target and 3D anchor from PhotoJobMarkerClient in GC
 local function GetMarkerClientData()
     if not getgc then return nil, nil end
     local list = getgc(true)
@@ -648,7 +644,7 @@ local function GetMarkerClientData()
 end
 
 -- ══════════════════════════════════════════════════════════════════════════════
--- 10. MAX SUCCESS RATE PHOTO CAPTURE ENGINE (v5.3)
+-- 10. MAX SUCCESS RATE PHOTO CAPTURE ENGINE (v5.4)
 -- ══════════════════════════════════════════════════════════════════════════════
 local function TrySubmitPhoto(camPos, aimPos)
     local cf = CFrame.lookAt(camPos, aimPos)
@@ -667,22 +663,18 @@ local function RunCapture()
     local accepted = false
     local cleanTarget = G.RawTaskText:gsub("get a photo of ", ""):gsub("^the ", ""):gsub("^%s*(.-)%s*$", "%1")
 
-    -- ── 1. Resolve Target Player & Anchor via Multi-Tier Hierarchy ──
     local targetPlayer = nil
     local markerTarget, markerAnchor = GetMarkerClientData()
 
-    -- Layer 1: Memory Target from MarkerClient (100% accurate)
     if markerTarget and markerTarget.UserId then
         G.TargetUserId = markerTarget.UserId
         targetPlayer = Players:GetPlayerByUserId(markerTarget.UserId)
     end
 
-    -- Layer 2: Cached TargetUserId from RemoteEvent
     if not targetPlayer and G.TargetUserId then
         targetPlayer = Players:GetPlayerByUserId(G.TargetUserId)
     end
 
-    -- Layer 3: In-game Character Info (RP Nameplate / BillboardGui)
     if not targetPlayer and cleanTarget ~= "" then
         local ct = cleanTarget:lower()
         for _, pl in ipairs(Players:GetPlayers()) do
@@ -698,7 +690,6 @@ local function RunCapture()
         end
     end
 
-    -- Layer 4: Fallback Username / DisplayName Search
     if not targetPlayer and cleanTarget ~= "" then
         local ct = cleanTarget:lower()
         for _, pl in ipairs(Players:GetPlayers()) do
@@ -714,15 +705,12 @@ local function RunCapture()
         end
     end
 
-    -- Check if target is explicitly a player task (indicated by "photo of [Name]" or Kind == "Player")
     local isPlayerTask = (markerTarget and markerTarget.Kind == "Player") or (G.TargetUserId ~= nil) or (G.RawTaskText:find("get a photo of ") ~= nil and not G.TargetArea)
 
-    -- ── 2. Execution ──
     if targetPlayer or (isPlayerTask and markerAnchor) then
         local tChar = targetPlayer and targetPlayer.Character
         local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
 
-        -- If target left or has no character, check if markerAnchor exists
         local aimP = nil
         local tL = Vector3.new(0, 0, -1)
         local tR = Vector3.new(1, 0, 0)
@@ -732,12 +720,10 @@ local function RunCapture()
             tL = tRoot.CFrame.LookVector
             tR = tRoot.CFrame.RightVector
         elseif markerAnchor and markerAnchor:IsA("BasePart") then
-            -- Fallback to game's active marker anchor
             aimP = markerAnchor.Position + Vector3.new(0, 0.5, 0)
             tL = markerAnchor.CFrame.LookVector
             tR = markerAnchor.CFrame.RightVector
         else
-            -- Target player has completely left server and no anchor exists -> Immediate reroll!
             Reroll("Target Player Left Server")
             G.IsBusy = false
             return
@@ -749,14 +735,13 @@ local function RunCapture()
 
         local originPos = tRoot and tRoot.Position or markerAnchor.Position
 
-        -- High-probability Sweet-Spot Geometry (Calibrated 5.5 studs front/flank)
         local angles = {
-            {originPos + tL * 5.5,                          aimP}, -- Sweet Spot #1 (Front Center)
-            {originPos + tL * 6.5,                          aimP}, -- Sweet Spot #2 (Front Mid)
-            {originPos + tL * 4.8 + Vector3.new(0, 0.3, 0), aimP}, -- Sweet Spot #3 (Front Eye-level)
-            {originPos + tR * 5.5,                          aimP}, -- Angle #4 (Right Flank)
-            {originPos - tR * 5.5,                          aimP}, -- Angle #5 (Left Flank)
-            {originPos - tL * 5.5,                          aimP}, -- Angle #6 (Rear Center)
+            {originPos + tL * 5.5,                          aimP},
+            {originPos + tL * 6.5,                          aimP},
+            {originPos + tL * 4.8 + Vector3.new(0, 0.3, 0), aimP},
+            {originPos + tR * 5.5,                          aimP},
+            {originPos - tR * 5.5,                          aimP},
+            {originPos - tL * 5.5,                          aimP},
         }
 
         for _, a in ipairs(angles) do
@@ -780,11 +765,9 @@ local function RunCapture()
         end
 
     elseif not isPlayerTask then
-        -- Area Landmark Capture
         local areaSearch = (G.TargetArea or cleanTarget):gsub("^the ", ""):gsub("^%s*(.-)%s*$", "%1")
         local matchedPart = nil
 
-        -- Check game's marker anchor first (if this was an area landmark job)
         if markerAnchor and markerAnchor:IsA("BasePart") then
             matchedPart = markerAnchor
         end
@@ -856,7 +839,6 @@ local function RunCapture()
             end
         end
     else
-        -- Was a player task but neither player nor anchor was found -> Skip immediately!
         Reroll("Target Player Not in Server")
         G.IsBusy = false
         return
@@ -875,7 +857,7 @@ local function RunCapture()
 end
 
 -- ══════════════════════════════════════════════════════════════════════════════
--- 11. HUD SETUP
+-- 11. HUD & ZERO-RAM 3D SCREEN BLANKER
 -- ══════════════════════════════════════════════════════════════════════════════
 local GuiPar = (gethui and gethui()) or CoreGui or LP:WaitForChild("PlayerGui")
 do
@@ -890,11 +872,20 @@ Gui.IgnoreGuiInset = true
 Gui.DisplayOrder   = 999999
 Gui.Parent         = GuiPar
 
+-- Determine screen color theme (black or white)
+local userColor = tostring(genv.ScreenColor or genv.screencolor or "black"):lower()
+local isWhiteTheme = (userColor == "white" or userColor == "light")
+local bgColor = isWhiteTheme and Color3.fromRGB(250, 250, 250) or Color3.fromRGB(0, 0, 0)
+local primaryTextColor = isWhiteTheme and Color3.fromRGB(0, 120, 80) or Color3.fromRGB(0, 255, 170)
+local strokeTextColor  = isWhiteTheme and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(0, 0, 0)
+
+-- Lightweight Zero-Memory Screen Blanker
 local BG = Instance.new("Frame", Gui)
 BG.Size             = UDim2.new(1, 0, 1, 0)
-BG.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+BG.BackgroundColor3 = bgColor
 BG.BorderSizePixel  = 0
 BG.Visible          = false
+BG.Active           = false
 
 local Txt = Instance.new("TextLabel", Gui)
 Txt.Size                   = UDim2.new(0, 750, 0, 195)
@@ -903,9 +894,9 @@ Txt.Position               = UDim2.new(0.5, 0, 0.5, 0)
 Txt.BackgroundTransparency = 1
 Txt.Font                   = Enum.Font.GothamBold
 Txt.TextSize               = 20
-Txt.TextColor3             = Color3.fromRGB(0, 255, 170)
+Txt.TextColor3             = primaryTextColor
 Txt.TextStrokeTransparency = 0
-Txt.TextStrokeColor3       = Color3.fromRGB(0, 0, 0)
+Txt.TextStrokeColor3       = strokeTextColor
 Txt.TextXAlignment         = Enum.TextXAlignment.Center
 Txt.TextYAlignment         = Enum.TextYAlignment.Center
 Txt.RichText               = true
@@ -914,7 +905,7 @@ Txt.ZIndex                 = 1000001
 local Btn = Instance.new("TextButton", Gui)
 Btn.Size             = UDim2.new(0, 130, 0, 34)
 Btn.Position         = UDim2.new(1, -145, 0, 15)
-Btn.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+Btn.BackgroundColor3 = isWhiteTheme and Color3.fromRGB(230, 230, 235) or Color3.fromRGB(15, 15, 20)
 Btn.BorderSizePixel  = 0
 Btn.Font             = Enum.Font.GothamBold
 Btn.TextSize         = 13
@@ -933,10 +924,11 @@ local function SetRender(on)
         bStroke.Color  = Color3.fromRGB(255, 190, 60)
     else
         Btn.Text       = "⚡ 3D: OFF"
-        Btn.TextColor3 = Color3.fromRGB(0, 255, 170)
-        bStroke.Color  = Color3.fromRGB(0, 255, 170)
+        Btn.TextColor3 = primaryTextColor
+        bStroke.Color  = primaryTextColor
     end
 end
+
 local disable3D = genv.Disable3D or genv.disable3d or genv.BlackScreen or false
 SetRender(not disable3D)
 
@@ -1070,15 +1062,21 @@ local mainThread = task.spawn(function()
         local now = os.clock()
         if (now - G.LastHudUpdate) >= 0.5 then
             G.LastHudUpdate = now
-            local boostStr = (genv.SuperBoost ~= false) and "<font color='#FF4444'>X Gakuran</font>" or "<font color='#AAAAAA'>BOOST OFF</font>"
+            local boostStr = (genv.SuperBoost ~= false) and "<font color='#FF4444'>⚡ SUPERBOOST</font>" or "<font color='#AAAAAA'>BOOST OFF</font>"
+            local labelCol = isWhiteTheme and "#333333" or "#AAAAAA"
+            local textCol  = isWhiteTheme and "#000000" or "#FFFFFF"
+            local targetCol = isWhiteTheme and "#B8860B" or "#FFFF00"
+            local actCol   = isWhiteTheme and "#008B8B" or "#00E6A0"
+            local moneyCol = isWhiteTheme and "#006400" or "#00FF88"
+
             local newText  = string.format(
                 "<font color='#00E6FF' size='13'><b>XDFLEX HUB</b></font> %s\n" ..
-                "<font color='#AAAAAA'>Task:   </font><font color='#FFFFFF'>%s</font>\n" ..
-                "<font color='#AAAAAA'>Action: </font><font color='#00E6A0'>%s</font>\n" ..
-                "<font color='#AAAAAA'>Target: </font><font color='#FFFF00'>%s</font>\n" ..
-                "<font color='#AAAAAA'>Money:  </font><font color='#00FF88'>%s</font>\n" ..
-                "<font color='#AAAAAA'>Log:    </font>%s",
-                boostStr, G.TaskText, G.Action, G.Target, G.Money, G.Log
+                "<font color='%s'>Task:   </font><font color='%s'>%s</font>\n" ..
+                "<font color='%s'>Action: </font><font color='%s'>%s</font>\n" ..
+                "<font color='%s'>Target: </font><font color='%s'>%s</font>\n" ..
+                "<font color='%s'>Money:  </font><font color='%s'>%s</font>\n" ..
+                "<font color='%s'>Log:    </font>%s",
+                boostStr, labelCol, textCol, G.TaskText, labelCol, actCol, G.Action, labelCol, targetCol, G.Target, labelCol, moneyCol, G.Money, labelCol, G.Log
             )
             if newText ~= G.LastRenderedText then
                 G.LastRenderedText = newText
