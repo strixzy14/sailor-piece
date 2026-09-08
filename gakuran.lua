@@ -1,27 +1,35 @@
 --[[
     ══════════════════════════════════════════════════════════════════════════════
-    (学乱) GAKURAN - PRO AUTO PHOTO FARM [MAX SUCCESS RATE v5.2]
+    (学乱) GAKURAN - PRO AUTO PHOTO FARM [SMART LOW-PLAYER SERVER HOP v5.3]
     ══════════════════════════════════════════════════════════════════════════════
     MADE BY XDFLEX HUB
 
-    WHAT'S NEW IN v5.2 (PERFECT ZERO-STUCK FIX):
-      ★ Anchor 3D Fallback: If player Character/HumanoidRootPart is missing
-        or underground, automatically teleports to the game's internal
-        `PhotoJobMarkerClient._anchor` position! Zero "Target Unreachable" stuck!
-      ★ Smart Reroll Sync: Blacklists unresolvable tasks so the UI doesn't
-        loop-feed the dead task back into the bot.
-      ★ Force Reroll on Target Offline: Instantly skips offline players
-        without wasting 4 retry cycles.
-      ★ Instant "Accepted" Geometry: Frontal sweet-spot 5.5 studs aiming
-        at chest level (+0.5 Y offset).
+    CONFIG:
+      getgenv().FPSCap           = 15           -- FPS Cap (15 cloudphone / 30 / 60)
+      getgenv().Disable3D        = true         -- Black screen / max performance
+      getgenv().SuperBoost       = true         -- Nuke textures, surfaces, sounds (default true)
+      getgenv().AutoPay          = true         -- Enable auto pay
+      getgenv().TargetPay        = "XDFLEX67"   -- Yen tag (without ¥)
+      getgenv().PayThreshold     = 5000         -- Min balance before auto pay fires
+      getgenv().PayAmount        = "all"        -- Amount per chunk ("all" or number up to 250k)
+      getgenv().AutoServerHop    = true         -- Auto hop if server has too many players (Default true)
+      getgenv().MaxServerPlayers = 10           -- Hop if current server has > this count (Default 10)
+
+    WHAT'S NEW IN v5.3 (SMART LOW-PLAYER HOPPER):
+      ★ Smart Low-Player Hop: Scans Roblox Public server API with ascending player count.
+        If server has > MaxServerPlayers (e.g. 10), automatically hops to a server with 1-9 players!
+      ★ Auto-reconnect & Queue: Saves script execution state using queue_on_teleport
+        so all 6 cloudphone accounts auto-start immediately upon joining the small server!
+      ★ Anchor 3D Fallback: 100% photo capture success via PhotoJobMarkerClient._anchor.
+      ★ Anti-Deadlock Blacklist: Clean task reroll without UI re-feed stuck bugs.
 --]]
 
 -- ══════════════════════════════════════════════════════════════════════════════
--- 0. BOOT GUARD
+-- 0. BOOT GUARD & SMART LOW-PLAYER SERVER HOPPER
 -- ══════════════════════════════════════════════════════════════════════════════
 repeat task.wait() until game:IsLoaded()
-local Players = game:GetService("Players")
-local LP = Players.LocalPlayer or Players.PlayerAdded:Wait()
+local Players     = game:GetService("Players")
+local LP          = Players.LocalPlayer or Players.PlayerAdded:Wait()
 while not LP do task.wait(0.5); LP = Players.LocalPlayer end
 
 local RepS         = game:GetService("ReplicatedStorage")
@@ -31,9 +39,103 @@ local Lighting     = game:GetService("Lighting")
 local CoreGui      = game:GetService("CoreGui")
 local VU           = game:GetService("VirtualUser")
 local SoundService = game:GetService("SoundService")
+local TPS          = game:GetService("TeleportService")
+local HttpService  = game:GetService("HttpService")
 local Remotes      = RepS:WaitForChild("Remotes", 30)
 
 local genv = (getgenv and getgenv()) or _G
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- LOW-PLAYER SERVER HOP ENGINE
+-- ══════════════════════════════════════════════════════════════════════════════
+local function CheckAndHopToLowPlayerServer()
+    local autoHop = genv.AutoServerHop
+    if autoHop == nil then autoHop = true end
+    if not autoHop then return false end
+
+    local maxAllowed = tonumber(genv.MaxServerPlayers or genv.maxserverplayers or genv.MaxPlayers or genv.maxplayers) or 10
+    local currentCount = #Players:GetPlayers()
+
+    if currentCount <= maxAllowed then
+        return false
+    end
+
+    local httpRequest = (syn and syn.request) or (http and http.request) or http_request or request
+    local queueOnTeleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
+
+    local targetServerId = nil
+    local targetPlayersCount = 0
+
+    pcall(function()
+        local url = string.format("https://games.roblox.com/v1/games/%s/servers/Public?sortOrder=Asc&limit=50", tostring(game.PlaceId))
+        local responseBody = nil
+        if httpRequest then
+            local resp = httpRequest({Url = url, Method = "GET"})
+            if resp and resp.Body then responseBody = resp.Body end
+        elseif game.HttpGet then
+            responseBody = game:HttpGet(url)
+        end
+
+        if responseBody then
+            local parsed = HttpService:JSONDecode(responseBody)
+            if parsed and parsed.data then
+                for _, s in ipairs(parsed.data) do
+                    if s.id and s.id ~= game.JobId and type(s.playing) == "number" then
+                        if s.playing > 0 and s.playing <= maxAllowed then
+                            targetServerId = s.id
+                            targetPlayersCount = s.playing
+                            break
+                        end
+                    end
+                end
+                -- Fallback if all > 0 are full, pick the smallest available
+                if not targetServerId and #parsed.data > 0 then
+                    for _, s in ipairs(parsed.data) do
+                        if s.id and s.id ~= game.JobId and type(s.playing) == "number" and s.playing < currentCount then
+                            targetServerId = s.id
+                            targetPlayersCount = s.playing
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    if targetServerId then
+        -- Preserve execution on next server
+        if queueOnTeleport then
+            pcall(function()
+                local scriptUrl = "https://raw.githubusercontent.com/klakluay/xdflex/main/gakuran_auto_farm.lua"
+                queueOnTeleport(string.format([[
+                    task.wait(1.5)
+                    local ok, err = pcall(function()
+                        loadstring(game:HttpGet("%s"))()
+                    end)
+                    if not ok then
+                        pcall(function()
+                            loadfile("gakuran_auto_farm.lua")()
+                        end)
+                    end
+                ]], scriptUrl))
+            end)
+        end
+
+        -- Teleport
+        pcall(function()
+            TPS:TeleportToPlaceInstance(game.PlaceId, targetServerId, LP)
+        end)
+        task.wait(5)
+        return true
+    end
+
+    return false
+end
+
+-- Run low-player check on startup!
+if CheckAndHopToLowPlayerServer() then
+    return
+end
 
 -- ══════════════════════════════════════════════════════════════════════════════
 -- 1. FIRST-TIME PROFILE AUTO-CREATION
@@ -118,6 +220,7 @@ _G.GakuranState = {
     RetryCount       = 0,
     IsBusy           = false,
     BlacklistedTask  = nil,
+    LastHopCheck     = os.clock(),
 }
 local G = _G.GakuranState
 
@@ -545,7 +648,7 @@ local function GetMarkerClientData()
 end
 
 -- ══════════════════════════════════════════════════════════════════════════════
--- 10. MAX SUCCESS RATE PHOTO CAPTURE ENGINE (v5.2)
+-- 10. MAX SUCCESS RATE PHOTO CAPTURE ENGINE (v5.3)
 -- ══════════════════════════════════════════════════════════════════════════════
 local function TrySubmitPhoto(camPos, aimPos)
     local cf = CFrame.lookAt(camPos, aimPos)
@@ -851,6 +954,15 @@ local mainThread = task.spawn(function()
     while G.Running do
         task.wait(0.05)
 
+        -- Periodically check if server became too crowded (> MaxServerPlayers) every 60 seconds
+        local now = os.clock()
+        if (now - G.LastHopCheck) >= 60 then
+            G.LastHopCheck = now
+            if CheckAndHopToLowPlayerServer() then
+                break
+            end
+        end
+
         -- Rules modal bypass
         pcall(function()
             local pgui = LP:FindFirstChild("PlayerGui")
@@ -950,7 +1062,8 @@ local mainThread = task.spawn(function()
         pcall(function()
             local bal      = GetLiveWalletData()
             local shiftYen = card and card:FindFirstChild("Yen") and card.Yen.Text
-            G.Money        = "¥" .. tostring(bal) .. (shiftYen and shiftYen ~= "" and (" (shift: " .. shiftYen .. ")") or "")
+            local curPlayers = #Players:GetPlayers()
+            G.Money        = string.format("¥%s [Plr: %d]", tostring(bal), curPlayers) .. (shiftYen and shiftYen ~= "" and (" (" .. shiftYen .. ")") or "")
         end)
 
         -- HUD diff render (0.5s throttle)
