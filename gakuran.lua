@@ -1062,7 +1062,7 @@ local mainThread = task.spawn(function()
         local now = os.clock()
         if (now - G.LastHudUpdate) >= 0.5 then
             G.LastHudUpdate = now
-            local boostStr = (genv.SuperBoost ~= false) and "<font color='#FF4444'>⚡ SUPERBOOST</font>" or "<font color='#AAAAAA'>BOOST OFF</font>"
+            local boostStr = (genv.SuperBoost ~= false) and "<font color='#FF4444'>X Gakuran</font>" or "<font color='#AAAAAA'>BOOST OFF</font>"
             local labelCol = isWhiteTheme and "#333333" or "#AAAAAA"
             local textCol  = isWhiteTheme and "#000000" or "#FFFFFF"
             local targetCol = isWhiteTheme and "#B8860B" or "#FFFF00"
