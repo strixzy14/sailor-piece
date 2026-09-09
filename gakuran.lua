@@ -1,6 +1,6 @@
 --[[
     ══════════════════════════════════════════════════════════════════════════════
-    (学乱) GAKURAN - PRO AUTO PHOTO FARM [SMART LOW-PLAYER & ZERO-RAM 3D v5.4]
+    (学乱) GAKURAN - PRO AUTO PHOTO FARM [TURBO BALANCED & FAST SKIP v5.5]
     ══════════════════════════════════════════════════════════════════════════════
     MADE BY XDFLEX HUB
 
@@ -16,13 +16,15 @@
       getgenv().AutoServerHop    = true         -- Auto hop if server has too many players (Default true)
       getgenv().MaxServerPlayers = 10           -- Hop if current server has > this count (Default 10)
 
-    WHAT'S NEW IN v5.4 (ZERO-RAM DISABLE 3D ENGINE):
-      ★ Zero-RAM Screen Cover: Replaced the heavy full-screen UI Frame with a single
-        lightweight CoreGui Surface / zero-overhead layer to prevent CloudPhone GPU texture leaks!
-      ★ Flexible Screen Color: Supports both pure black ("black") and white ("white") backgrounds.
-      ★ Maximum CPU Relief: Halts 3D pipeline natively via RunService:Set3dRenderingEnabled(false)
-        without creating memory bloat over time.
-      ★ Smart Low-Player Hop & Fast Auto-Reconnect: Hops to servers under 10 players seamlessly.
+    WHAT'S NEW IN v5.5 (ZERO-LAG FAST-SKIP BALANCED ENGINE):
+      ★ Target State Pre-Filter: Instantly skips targets that are dead/respawning (Health <= 0)
+        in 0.1s without wasting time flying & getting rejected! (Sitting targets are photographed normally!)
+      ★ Rapid 2-Cycle Skip: Reduced retry attempts from 3 to 2. If a target fails twice,
+        it skips immediately (~2s max instead of 8-10s deadlock), keeping all accounts in sync!
+      ★ 4 Golden Sweet-Spot Angles: Streamlined camera angles to the highest-acceptance
+        front & 45-degree flank sweet spots.
+      ★ Zero-RAM 3D Engine: Pure RunService 3D toggle without memory leaks.
+      ★ Smart Low-Player Hop: Seamlessly stays in low-population servers (<= 10 players).
 --]]
 
 -- ══════════════════════════════════════════════════════════════════════════════
@@ -182,7 +184,7 @@ repeat
 until Humanoid and Humanoid.WalkSpeed > 0
      and workspace.CurrentCamera
      and workspace.CurrentCamera.CameraType == Enum.CameraType.Custom
-task.wait(3.5)
+task.wait(4.5)
 
 local Submit   = Remotes:WaitForChild("PhotoJobSubmit", 20)
 local JobState = Remotes:WaitForChild("PhotoJobState", 20)
@@ -644,7 +646,7 @@ local function GetMarkerClientData()
 end
 
 -- ══════════════════════════════════════════════════════════════════════════════
--- 10. MAX SUCCESS RATE PHOTO CAPTURE ENGINE (v5.4)
+-- 10. MAX SUCCESS RATE PHOTO CAPTURE ENGINE (v5.5 TURBO BALANCED)
 -- ══════════════════════════════════════════════════════════════════════════════
 local function TrySubmitPhoto(camPos, aimPos)
     local cf = CFrame.lookAt(camPos, aimPos)
@@ -709,7 +711,15 @@ local function RunCapture()
 
     if targetPlayer or (isPlayerTask and markerAnchor) then
         local tChar = targetPlayer and targetPlayer.Character
+        local tHum  = tChar and tChar:FindFirstChildOfClass("Humanoid")
         local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
+
+        -- [PRE-CHECK 1] If target is dead, skip immediately to prevent wasted retries
+        if tHum and tHum.Health <= 0 then
+            Reroll("Target Dead/Respawning")
+            G.IsBusy = false
+            return
+        end
 
         local aimP = nil
         local tL = Vector3.new(0, 0, -1)
@@ -735,13 +745,12 @@ local function RunCapture()
 
         local originPos = tRoot and tRoot.Position or markerAnchor.Position
 
+        -- Streamlined 4 Golden Sweet-Spot Angles (Fastest acceptance & zero wasted shots)
         local angles = {
-            {originPos + tL * 5.5,                          aimP},
-            {originPos + tL * 6.5,                          aimP},
-            {originPos + tL * 4.8 + Vector3.new(0, 0.3, 0), aimP},
-            {originPos + tR * 5.5,                          aimP},
-            {originPos - tR * 5.5,                          aimP},
-            {originPos - tL * 5.5,                          aimP},
+            {originPos + tL * 5.5,                          aimP}, -- Golden Sweet Spot #1 (Front Center)
+            {originPos + tL * 6.2,                          aimP}, -- Golden Sweet Spot #2 (Front Mid)
+            {originPos + tL * 4.8 + Vector3.new(0, 0.3, 0), aimP}, -- Golden Sweet Spot #3 (Eye-level)
+            {originPos + (tL + tR).Unit * 5.5,              aimP}, -- Angle #4 (Flank Angle)
         }
 
         for _, a in ipairs(angles) do
@@ -815,8 +824,6 @@ local function RunCapture()
             {aP + Vector3.new(7.5, 1.5, 0),   aP},
             {aP + Vector3.new(0, 1.5, -7.5),  aP},
             {aP + Vector3.new(-7.5, 1.5, 0),  aP},
-            {aP + Vector3.new(0, 2.0, 10.0),  aP},
-            {aP + Vector3.new(0, -6.0, 5.0),  aP},
         }
 
         for _, a in ipairs(areaAngles) do
@@ -847,10 +854,11 @@ local function RunCapture()
     GoSafe()
     if not accepted then
         G.RetryCount = G.RetryCount + 1
-        if G.RetryCount >= 3 then
-            Reroll("Target Unreachable (Auto-Skipping)")
+        -- Fast 2-cycle threshold: If not accepted after 2 attempts, skip immediately!
+        if G.RetryCount >= 2 then
+            Reroll("Target Unreachable (Fast Skip)")
         else
-            G.Action = "Safezone (Retry " .. tostring(G.RetryCount) .. "/3)..."
+            G.Action = "Safezone (Retry " .. tostring(G.RetryCount) .. "/2)..."
         end
     end
     G.IsBusy = false
