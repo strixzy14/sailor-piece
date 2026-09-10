@@ -182,7 +182,7 @@ repeat
 until Humanoid and Humanoid.WalkSpeed > 0
      and workspace.CurrentCamera
      and workspace.CurrentCamera.CameraType == Enum.CameraType.Custom
-task.wait(3.5)
+task.wait(4.5)
 
 local Submit   = Remotes:WaitForChild("PhotoJobSubmit", 20)
 local JobState = Remotes:WaitForChild("PhotoJobState", 20)
