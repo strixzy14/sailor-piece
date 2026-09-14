@@ -1015,6 +1015,9 @@ local towerEngine = task.spawn(function()
                 if floorMatch then
                     CurrentTowerFloor = tonumber(floorMatch) or CurrentTowerFloor
                 end
+                if CurrentRunningTower == "None" or CurrentRunningTower == "" then
+                    CurrentRunningTower = "Infinity Tower"
+                end
 
                 -- Auto-minimize tower UI so screen is clean
                 if Screen and Screen.Visible and Hidden then
@@ -1081,9 +1084,9 @@ local towerEngine = task.spawn(function()
                         end
                     end
 
-                    local chosenTower = "Dragon Tower"
+                    local chosenTower = "Infinity Tower"
                     if CFG.TowerMode == "auto" then
-                        chosenTower = EvaluateSmartTower()
+                        chosenTower = "Infinity Tower"
                     else
                         local modeStr = string.lower(tostring(CFG.TowerMode))
                         if string.find(modeStr, "inf") then
@@ -1096,6 +1099,8 @@ local towerEngine = task.spawn(function()
                             chosenTower = "Pirate Tower"
                         elseif string.find(modeStr, "leaf") or string.find(modeStr, "hidden") then
                             chosenTower = "Hidden Leaf Tower"
+                        elseif string.find(modeStr, "smart") then
+                            chosenTower = EvaluateSmartTower()
                         else
                             chosenTower = CFG.TowerMode
                         end
