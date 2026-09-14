@@ -11,6 +11,7 @@ local DefaultCFG = {
     -- ─── ระบบหลัก & ประสิทธิภาพ (Main & Performance) ───
     AutoStart       = true,     -- รันระบบฟาร์มอัตโนมัติทันทีเมื่อเอ็กซีคิวท์
     AntiAFK         = true,     -- ระบบป้องกันหลุดการเชื่อมต่อ (Bypass Kick 20 นาที ไร้รอยต่อ)
+    MuteAudio       = true,     -- ปิดเสียงเกมทั้งหมด 100% (MasterVolume = 0) สบายหูเวลาเปิดฟาร์มหลายจอพร้อมกัน
     FPSBoost        = true,     -- บูสต์ FPS ระดับสูงสุด (ลดกราฟิก แสง เงา พาร์ติเคิล ช่วยให้ฟาร์มลื่นและไม่กินสเปก)
     FPSLock         = 60,       -- ล็อกอัตราเฟรมเรตคงที่ (เช่น 30, 60 หรือ 0 เพื่อปลดล็อกไม่จำกัด)
     ShowOverlay     = true,     -- แสดง HUD กลางจอ (ดีไซน์ Minimal คลีนตา ไร้อิโมจิ ล็อกแข็งไม่เกะกะ)
@@ -43,16 +44,32 @@ local DefaultCFG = {
     AutoRedeemCode  = true,     -- เคลมโค้ดของขวัญฟรีทั้งหมดในเกมอัตโนมัติ (ข้ามโค้ดที่เคยใช้แล้ว)
     RedeemCode      = true,     -- รองรับชื่อเรียกทั้ง RedeemCode และ AutoRedeemCode
 
-    -- ─── เครือข่ายเทรดส่งของเข้าคลังไอดีหลัก (Multi-Account Vault) ───
-    AutoTrade       = false,    -- ระบบส่งของอัตโนมัติ (เปิดเมื่อต้องการโอนของเข้าไอดีหลัก)
-    TradeHost       = "0",      -- ไอดีผู้รับของ (ระบุ UserId ตัวเลข หรือ "@ชื่อผู้ใช้" · 0=ปิด)
-    TradeMembers    = {},       -- รายชื่อไอดีที่อนุญาตให้ส่ง (ปล่อยว่าง = ทุกไอดีรองส่งเข้า host หมด)
-    TradeSendMode   = "keep_slotted", -- รูปแบบการส่ง: "keep_slotted" (เก็บตัวประจำการ) / "all" (ส่งหมด) / "keep_income" (เก็บตัวเงินสูง)
-    TradeKeepIncome = 0,        -- กรณีโหมด keep_income: ละเว้นยูนิตที่มีรายได้ $/s สูงกว่าค่านี้
-    TradeTokens     = true,     -- โอนย้าย Gems และ Trait Reroll เข้าไอดีหลักด้วยอัตโนมัติ
-    TradeMinItems   = 1,        -- จำนวนรายการขั้นต่ำที่ต้องมีในตัวก่อนจะเริ่มส่งเทรด (ป้องกันการขอเทรดตัวเปล่า)
-    TradeCooldown   = 15,       -- ระยะเวลาพักคูลดาวน์หลังจบการเทรด 1 รอบ เพื่อให้ฟาร์มสะสมของรอบใหม่ (วินาที)
-    TradeGather     = true,     -- วาร์ปรวมตัวอัตโนมัติหากไอดีหลักอยู่คนละเซิร์ฟเวอร์
+    -- ─── ระบบสุ่มเกรดยูนิตอัตโนมัติ (Auto Grade) ───
+    AutoGrade            = true,     -- สุ่มหาเกรดที่เลือกให้ทุกตัวที่ประจำการใน Slot บ้านอัตโนมัติ
+    TargetGrade          = "A",      -- เกรดเป้าหมายขั้นต่ำที่ต้องการ (เช่น "A", "A+", "S", "S+", "Z", "Z+", "神") ถ้าได้เกรดนี้หรือดีกว่าจะหยุดแล้วไปทำตัวต่อไป
+    GradeMinGemsReserve  = 0,        -- สำรอง Gems ขั้นต่ำไว้กี่เม็ด (ถ้า Gems เหลือน้อยกว่านี้จะไม่โรลเกรด · 0=ใช้หมด)
+
+    -- ─── เครือข่ายเทรดส่งของเข้าคลังไอดีหลัก (Smart Multi-Account Vault) ───
+    AutoTrade          = true,     -- ระบบส่งของอัตโนมัติ (เปิดเมื่อต้องการโอนของเข้าไอดีหลัก)
+    TradeHost          = "9747455152", -- ไอดีผู้รับของ (UserId หรือ "@ชื่อผู้ใช้" เริ่มต้นเป็นไอดีหลัก xzbmxi)
+    TradeMembers       = {},       -- ไวท์ลิสต์ไอดีไก่ที่ตัวหลักจะยอมรับเทรด (ปล่อยว่าง = รับจากทุกตัวที่ส่งมา)
+    TradeCooldown      = 15,       -- ระยะเวลาพักคูลดาวน์หลังจบการเทรด 1 รอบ เพื่อให้ฟาร์มสะสมของรอบใหม่ (วินาที)
+    TradeGather        = true,     -- วาร์ปรวมตัวอัตโนมัติหากไอดีหลักอยู่คนละเซิร์ฟเวอร์
+
+    -- ── ตัวเลือกหมวดไอเทมที่ต้องการเทรด (Item & Token Filters) ──
+    TradeGems          = true,     -- เทรด Gems (เพชร) เข้าไอดีหลัก
+    TradeMinGems       = 100,      -- สะสม Gems ให้ถึงขั้นต่ำนี้ก่อนค่อยเทรด (เช่น 100 · 0=มีเท่าไหร่ก็เทรด)
+    TradeTraits        = true,     -- เทรด Trait Reroll (ตั๋วรี Trait) เข้าไอดีหลัก
+    TradeMinTraits     = 100,      -- สะสม Trait ให้ถึงขั้นต่ำนี้ก่อนค่อยเทรด (เช่น 100 · 0=มีเท่าไหร่ก็เทรด)
+    TradeTickets       = false,    -- เทรด Ticket (หมายเหตุ: เกม Anime Dice ล็อคห้ามเทรดตั๋วไว้โดยระบบเกม)
+
+    -- ── ตัวเลือกหมวดยูนิตตัวละคร (Unit Filters) ──
+    TradeUnits         = false,    -- เทรดยูนิตตัวละครไหม? (ตั้ง false ถ้าต้องการเทรดแค่ Gems / Trait เท่านั้น ไม่เอา Unit)
+    TradeMinUnits      = 5,        -- ต้องสะสมยูนิตที่ตรงเงื่อนไขให้ได้อย่างน้อยกี่ตัว ถึงจะเริ่มขอเทรด (ช่วยให้ไม่ต้องเทรดบ่อย)
+    TradeMinUnitIncome = "1e12",   -- เทรดเฉพาะยูนิตที่มีรายได้ $/s ขั้นต่ำเท่านี้ขึ้นไป (เช่น "1e12", "1t" · 0=ไม่จำกัด)
+    TradeMaxUnitIncome = 0,        -- เพดานรายได้ยูนิตสูงสุดที่จะเทรด (0=ไม่จำกัด)
+    TradeKeepSlotted   = true,     -- คุ้มครองยูนิตที่วางทำงานในแปลงบ้าน จะไม่ถูกเทรดเด็ดขาด
+    TradeSendMode      = "keep_slotted", -- โหมดสำรอง: "keep_slotted" / "all"
 }
 
 -- Support external loadstring config injection (getgenv().KaitunConfig or getgenv().CFG)
@@ -128,6 +145,19 @@ local TeleportService   = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
 local PlaceId     = game.PlaceId
 
+local tradeSession = {
+    active = false,
+    phase = "None",
+    partner = nil,
+    ownReady = false,
+    otherReady = false,
+    ownAccepted = false,
+    otherAccepted = false,
+    offered = false,
+    lastAction = 0,
+    cooldownUntil = 0
+}
+
 local function GetSafeUIContainer()
     local container = nil
     if typeof(gethui) == "function" then
@@ -164,6 +194,23 @@ local function FormatNumber(n)
     else
         return tostring(math.floor(n))
     end
+end
+
+-- =========================================================================
+-- [2.0] MUTE AUDIO (VOLUME 0 FOR MULTI-CLIENT FARMING)
+-- =========================================================================
+if CFG.MuteAudio then
+    pcall(function()
+        UserSettings().GameSettings.MasterVolume = 0
+    end)
+    local muteConn = RunService.Heartbeat:Connect(function()
+        pcall(function()
+            if UserSettings().GameSettings.MasterVolume > 0 then
+                UserSettings().GameSettings.MasterVolume = 0
+            end
+        end)
+    end)
+    table.insert(activeCleanupHooks, function() muteConn:Disconnect() end)
 end
 
 -- =========================================================================
@@ -226,6 +273,7 @@ local EntryRegistry    = require(ReplicatedStorage.Framework.Features.Inventory.
 local UnitUtil         = require(ReplicatedStorage.Framework.Features.Inventory.Kinds.Unit.UnitUtil)
 local BoostConfig      = require(ReplicatedStorage.Framework.Features.Inventory.Kinds.Boost.BoostConfig)
 local TradeConfig      = require(ReplicatedStorage.Framework.Features.Trading.TradeConfig)
+local GradesConfig     = require(ReplicatedStorage.Framework.Features.Grades.Grades)
 
 -- [4] REMOTES
 local Network              = ReplicatedStorage.Network
@@ -271,6 +319,10 @@ local TradeSignalAdvanceTrade       = TradeComm:GetSignal("AdvanceTrade")
 local TradeSignalCancelTrade        = TradeComm:GetSignal("CancelTrade")
 local TradeSignalEvent              = TradeComm:GetSignal("TradeEvent")
 
+-- RedNet ClientComm for Grade Rolling
+local GradeComm                     = ClientComm.new(ReplicatedStorage.Network, false, "GradeService")
+local GradeSignalRoll               = GradeComm:GetSignal("Roll")
+
 -- =========================================================================
 -- [5] OVERLAY HUD (DEAD CENTER • NO BACKGROUND • IMAGE 2 MINIMAL STYLE)
 -- =========================================================================
@@ -292,7 +344,7 @@ if CFG.ShowOverlay then
         frame.Name = "CenterFloatingHUD"
         frame.AnchorPoint = Vector2.new(0.5, 0.5)
         frame.Position = UDim2.new(0.5, 0, 0.5, 0) -- DEAD CENTER
-        frame.Size = UDim2.new(0, 580, 0, 255)
+        frame.Size = UDim2.new(0, 580, 0, 285)
         frame.BackgroundTransparency = 1 -- NO BACKGROUND AT ALL
         frame.BorderSizePixel = 0
         frame.Active = false
@@ -329,7 +381,8 @@ if CFG.ShowOverlay then
         OverlayUI.TowerLabel       = CreateCenterText("Tower", "Tower : None : ชั้น 0", 20, Color3.fromRGB(255, 255, 255), 128, false)
         OverlayUI.RebirthDiceLabel = CreateCenterText("RebirthDice", "Rebirth : 0 • เต๋า : Basic", 19, Color3.fromRGB(255, 255, 255), 158, false)
         OverlayUI.StorageLabel     = CreateCenterText("Storage", "Storage : 0/100", 19, Color3.fromRGB(255, 255, 255), 187, false)
-        OverlayUI.RuntimeLabel     = CreateCenterText("Runtime", "Runtime : 00:00:00", 17, Color3.fromRGB(220, 220, 220), 215, false)
+        OverlayUI.TokensLabel      = CreateCenterText("Tokens", "Gems : 0 • Trait : 0 • Ticket : 0", 19, Color3.fromRGB(255, 230, 120), 215, false)
+        OverlayUI.RuntimeLabel     = CreateCenterText("Runtime", "Runtime : 00:00:00", 17, Color3.fromRGB(220, 220, 220), 244, false)
 
         -- Animated Rainbow Cycle for XDFLEX HUB Title
         local rainbowTask = task.spawn(function()
@@ -411,13 +464,34 @@ local function GetBackpackItemStats(data)
     return gems, traits, tickets
 end
 
--- Convert suffix strings ("1T", "1qi", "1.5m") or raw numbers into numerical value (Case-Insensitive)
+-- Compare grade ranks: returns integer order (D=1, C=2, B=3, A=4, A+=5, S=6, S+=7, Z=8, Z+=9, 神=10)
+local function GetGradeOrder(gradeName)
+    if not gradeName then return 0 end
+    local gStr = tostring(gradeName)
+    if GradesConfig and GradesConfig[gStr] and GradesConfig[gStr].order then
+        return GradesConfig[gStr].order
+    end
+    -- Fallback mapping if module not yet loaded
+    local gradeOrderMap = {
+        ["D"] = 1, ["C"] = 2, ["B"] = 3, ["A"] = 4, ["A+"] = 5,
+        ["S"] = 6, ["S+"] = 7, ["Z"] = 8, ["Z+"] = 9, ["神"] = 10, ["GOD"] = 10
+    }
+    return gradeOrderMap[string.upper(gStr)] or gradeOrderMap[gStr] or 0
+end
+
+-- Convert suffix strings ("1T", "1qi", "1.5m", "1e12") or raw numbers into numerical value (Case-Insensitive)
 local function ParseIncomeValue(val)
     if typeof(val) == "number" then
         return val
     end
     if typeof(val) == "string" then
         local cleaned = string.lower(string.gsub(val, "%s+", ""))
+        -- First check if it's direct scientific notation or plain number (e.g. "1e12", "5000")
+        local directNum = tonumber(cleaned)
+        if directNum then
+            return directNum
+        end
+
         local numStr, unit = string.match(cleaned, "^([%d%.]+)(%a*)$")
         local num = tonumber(numStr)
         if not num then return 0 end
@@ -531,6 +605,7 @@ local farmEngine = task.spawn(function()
     local lastRewardCheck = 0
     local lastBoostCheck  = 0
     local lastCodeCheck   = 0
+    local lastGradeRoll   = 0
     local attemptedCodes  = {}
     local allCodesDone    = false
 
@@ -539,8 +614,10 @@ local farmEngine = task.spawn(function()
         local data = DataController.___X
 
         if data then
-            -- 1. Auto Roll & Sell Safeguard
-            if CFG.AutoRoll and (now - lastRoll >= 0.11) then
+            local isTradingNow = tradeSession and tradeSession.active
+
+            -- 1. Auto Roll & Sell Safeguard (Paused during trade)
+            if CFG.AutoRoll and not isTradingNow and (now - lastRoll >= 0.11) then
                 lastRoll = now
                 pcall(function()
                     local uCount, maxStorage = GetStorageStats(data)
@@ -560,8 +637,8 @@ local farmEngine = task.spawn(function()
                 end)
             end
 
-            -- 2. Periodic Sell Cleanup
-            if CFG.AutoSell and (now - lastSellCheck >= 1.5) then
+            -- 2. Periodic Sell Cleanup (Paused during trade)
+            if CFG.AutoSell and not isTradingNow and (now - lastSellCheck >= 1.5) then
                 lastSellCheck = now
                 pcall(function()
                     local uCount, maxStorage = GetStorageStats(data)
@@ -799,6 +876,48 @@ local farmEngine = task.spawn(function()
                     end
                 end)
             end
+
+            -- 13. Auto Grade (Rolls grades on each slotted unit until TargetGrade or higher is achieved)
+            if CFG.AutoGrade and not isTradingNow and (now - lastGradeRoll >= 0.3) then
+                lastGradeRoll = now
+                pcall(function()
+                    if not (data.Slots and data.Inventory) then return end
+                    local gems, _, _ = GetBackpackItemStats(data)
+                    local reserveGems = tonumber(CFG.GradeMinGemsReserve) or 0
+                    if gems <= reserveGems then return end
+
+                    local targetOrder = GetGradeOrder(CFG.TargetGrade or "A")
+                    if targetOrder <= 0 then targetOrder = 4 end -- Default "A" order is 4
+
+                    -- Sort slots numerically (1 to max) so upgrade order is predictable
+                    local slotKeys = {}
+                    for sKey in pairs(data.Slots) do
+                        table.insert(slotKeys, tonumber(sKey) or sKey)
+                    end
+                    table.sort(slotKeys, function(a, b)
+                        if type(a) == "number" and type(b) == "number" then return a < b end
+                        return tostring(a) < tostring(b)
+                    end)
+
+                    for _, slotIdx in ipairs(slotKeys) do
+                        local slotData = data.Slots[tostring(slotIdx)] or data.Slots[slotIdx]
+                        local uid = slotData and slotData.unitId
+                        if uid then
+                            local unit = data.Inventory[uid]
+                            if unit then
+                                local curGrade = (unit.attributes and unit.attributes.grade) or "None"
+                                local curOrder = GetGradeOrder(curGrade)
+
+                                -- If this unit's grade is below our target rank, roll it!
+                                if curOrder < targetOrder then
+                                    GradeSignalRoll:Fire(uid, true)
+                                    break -- Process one roll per cycle for maximum stability
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
         end
     end
 end)
@@ -925,71 +1044,132 @@ table.insert(activeCleanupHooks, function() task.cancel(towerEngine) end)
 -- =========================================================================
 -- [10] HEADLESS AUTO-TRADE SYSTEM (MULTI-ACCOUNT VAULT & TOKEN TRANSFER)
 -- =========================================================================
-local tradeSession = {
-    active = false,
-    phase = "None",
-    partner = nil,
-    ownReady = false,
-    otherReady = false,
-    ownAccepted = false,
-    otherAccepted = false,
-    offered = false,
-    lastAction = 0,
-    cooldownUntil = 0
-}
+-- Smart evaluation of trade eligibility & offer lists based on user criteria
+local function GetSmartTradeData(data)
+    if not data then
+        return {
+            isReady = false,
+            offers = {},
+            statusText = "กำลังฟาร์ม (รอข้อมูลตัวละคร)",
+            gems = 0,
+            traits = 0,
+            tickets = 0,
+            units = 0
+        }
+    end
 
--- Calculate eligible items for trade (tokens + eligible units)
-local function GetTradeableOfferList(data)
-    if not data then return {}, 0 end
     local inv = data.Inventory or {}
     local slots = data.Slots or {}
     local plotted = SellUtil.GetPlottedUnits(slots)
     local untradeables = (TradeConfig and TradeConfig.UNTRADEABLE_ENTRIES) or {"Tickets"}
-    local list = {}
-    local totalItemsCount = 0
 
-    -- 1. Tokens first (Gems & Trait Reroll)
-    if CFG.TradeTokens ~= false then
-        for key, entry in pairs(inv) do
-            if entry and entry.name and entry.amount and entry.amount > 0 then
-                local cfg = EntryRegistry.getEntryConfig(entry.name)
-                if cfg and cfg.kind ~= "Unit" then
-                    local name = string.lower(entry.name)
-                    local isUntradeable = table.find(untradeables, entry.name) ~= nil
-                    if not isUntradeable and (name == "gems" or string.find(name, "gem") or name == "trait reroll" or string.find(name, "trait")) then
-                        table.insert(list, {key = key, amount = entry.amount, kind = "token", name = entry.name})
-                        totalItemsCount = totalItemsCount + entry.amount
+    local tokenOffers = {}
+    local unitOffers = {}
+    local curGems = 0
+    local curTraits = 0
+    local curTickets = 0
+
+    -- 1. Scan tokens
+    for key, entry in pairs(inv) do
+        if entry and entry.name and entry.amount and entry.amount > 0 then
+            local cfg = EntryRegistry.getEntryConfig(entry.name)
+            if cfg and cfg.kind ~= "Unit" then
+                local name = string.lower(entry.name)
+                local amt = entry.amount or 1
+                local isUntradeable = table.find(untradeables, entry.name) ~= nil
+
+                if name == "gems" or string.find(name, "gem") then
+                    curGems = curGems + amt
+                    if CFG.TradeGems ~= false and not isUntradeable then
+                        table.insert(tokenOffers, {key = key, amount = amt, kind = "token", name = entry.name})
+                    end
+                elseif name == "trait reroll" or string.find(name, "trait") then
+                    curTraits = curTraits + amt
+                    if CFG.TradeTraits ~= false and not isUntradeable then
+                        table.insert(tokenOffers, {key = key, amount = amt, kind = "token", name = entry.name})
+                    end
+                elseif name == "tickets" or name == "ticket" or string.find(name, "ticket") then
+                    curTickets = curTickets + amt
+                    if CFG.TradeTickets == true and not isUntradeable then
+                        table.insert(tokenOffers, {key = key, amount = amt, kind = "token", name = entry.name})
                     end
                 end
             end
         end
     end
 
-    -- 2. Units next (respecting TradeSendMode, locked state, and slotted state)
-    for key, unit in pairs(inv) do
-        local cfg = EntryRegistry.getEntryConfig(unit.name)
-        if cfg and cfg.kind == "Unit" and not (unit.attributes and unit.attributes.locked) then
-            local canSend = false
-            if CFG.TradeSendMode == "keep_slotted" and not plotted[key] then
-                canSend = true
-            elseif CFG.TradeSendMode == "all" then
-                canSend = true
-            elseif CFG.TradeSendMode == "keep_income" and not plotted[key] then
-                local inc = (cfg.income and cfg.income(unit.attributes)) or 0
-                local threshold = ParseIncomeValue(CFG.TradeKeepIncome)
-                if threshold <= 0 or inc < threshold then
-                    canSend = true
-                end
-            end
+    -- 2. Scan units if TradeUnits is enabled
+    local minUnitIncome = ParseIncomeValue(CFG.TradeMinUnitIncome)
+    local maxUnitIncome = ParseIncomeValue(CFG.TradeMaxUnitIncome)
 
-            if canSend then
-                table.insert(list, {key = key, amount = 1, kind = "unit", name = unit.name})
-                totalItemsCount = totalItemsCount + 1
+    if CFG.TradeUnits == true then
+        for key, unit in pairs(inv) do
+            local cfg = EntryRegistry.getEntryConfig(unit.name)
+            if cfg and cfg.kind == "Unit" and not (unit.attributes and unit.attributes.locked) then
+                local isSlotted = plotted[key] ~= nil
+                local allowSlotted = not (CFG.TradeKeepSlotted ~= false and isSlotted)
+
+                if allowSlotted then
+                    local inc = (cfg.income and cfg.income(unit.attributes)) or 0
+                    local matchMin = (minUnitIncome <= 0) or (inc >= minUnitIncome)
+                    local matchMax = (maxUnitIncome <= 0) or (inc <= maxUnitIncome)
+
+                    if matchMin and matchMax then
+                        table.insert(unitOffers, {key = key, amount = 1, kind = "unit", name = unit.name, income = inc})
+                    end
+                end
             end
         end
     end
 
-    return list, totalItemsCount
+    -- 3. Check readiness thresholds
+    local gemThreshold = tonumber(CFG.TradeMinGems) or 0
+    local traitThreshold = tonumber(CFG.TradeMinTraits) or 0
+    local unitMinCount = tonumber(CFG.TradeMinUnits) or 1
+
+    local gemsReady = (CFG.TradeGems ~= false) and (curGems > 0) and (gemThreshold <= 0 or curGems >= gemThreshold)
+    local traitsReady = (CFG.TradeTraits ~= false) and (curTraits > 0) and (traitThreshold <= 0 or curTraits >= traitThreshold)
+    local unitsReady = (CFG.TradeUnits == true) and (#unitOffers >= unitMinCount)
+
+    local isReady = gemsReady or traitsReady or unitsReady
+
+    -- Build consolidated offer list
+    local finalOffers = {}
+    for _, t in ipairs(tokenOffers) do table.insert(finalOffers, t) end
+    for _, u in ipairs(unitOffers) do table.insert(finalOffers, u) end
+
+    -- Build detailed HUD status string for farming progress
+    local progressList = {}
+    if CFG.TradeGems ~= false and gemThreshold > 0 then
+        table.insert(progressList, string.format("Gems: %d/%d", curGems, gemThreshold))
+    end
+    if CFG.TradeTraits ~= false and traitThreshold > 0 then
+        table.insert(progressList, string.format("Trait: %d/%d", curTraits, traitThreshold))
+    end
+    if CFG.TradeUnits == true and unitMinCount > 1 then
+        table.insert(progressList, string.format("Units: %d/%d", #unitOffers, unitMinCount))
+    end
+
+    local statusText = "กำลังฟาร์มสะสมของ"
+    if #progressList > 0 then
+        statusText = "ฟาร์มสะสมของ (" .. table.concat(progressList, " • ") .. ")"
+    end
+
+    return {
+        isReady = isReady,
+        offers = finalOffers,
+        statusText = statusText,
+        gems = curGems,
+        traits = curTraits,
+        tickets = curTickets,
+        units = #unitOffers
+    }
+end
+
+-- Backward compatibility alias
+local function GetTradeableOfferList(data)
+    local smart = GetSmartTradeData(data)
+    return smart.offers, #smart.offers
 end
 
 local tradeEvt = TradeSignalEvent:Connect(function(evt, payload)
@@ -1063,6 +1243,17 @@ local tradeEngine = task.spawn(function()
                     end
                 end
 
+                -- Host Auto-Accept Watcher (Direct UI Fallback for instant accept)
+                local UIReferences = require(ReplicatedStorage.Framework.Features.UI.UIReferences)
+                local TradeNotification = UIReferences.Root.Trading.TradeNotification
+                local TradeScreen = UIReferences.Root.Trading.TradeScreen
+
+                if isHost and TradeNotification and TradeNotification.Visible then
+                    task.wait(0.15)
+                    TradeSignalRespondToRequest:Fire(true)
+                    TradeNotification.Visible = false
+                end
+
                 -- Teleport Gather if host is in another server (only alts teleport to host)
                 if not hostTarget and CFG.TradeGather and not isHost then
                     local env = (getgenv and getgenv()) or _G
@@ -1071,21 +1262,19 @@ local tradeEngine = task.spawn(function()
                     end
                 end
 
-                local UIReferences = require(ReplicatedStorage.Framework.Features.UI.UIReferences)
-                local TradeScreen = UIReferences.Root.Trading.TradeScreen
                 local isTrading = (TradeScreen and TradeScreen.Visible) or tradeSession.active
 
-                -- Sender Logic (Alts): Send request ONLY if eligible AND has items to trade AND not on cooldown
+                -- Sender Logic (Alts): Send request ONLY if eligible AND has met threshold criteria AND not on cooldown
                 if not isTrading and not isHost and hostTarget then
                     local minRolls = (TradeConfig and TradeConfig.MIN_ROLLS) or 1000
                     local minAge = (TradeConfig and TradeConfig.MIN_ACCOUNT_AGE) or 14
-                    local tradeables, totalTradeCount = GetTradeableOfferList(data)
-                    local minItems = CFG.TradeMinItems or 1
+                    local smartTrade = GetSmartTradeData(data)
                     local isCooldown = tradeSession.cooldownUntil and os.clock() < tradeSession.cooldownUntil
 
-                    -- Prevent useless loop trades: MUST have actual items to trade (#tradeables >= minItems)
-                    if (data.Rolls or 0) >= minRolls and LocalPlayer.AccountAge >= minAge and not isCooldown and #tradeables >= minItems then
-                        if os.clock() - tradeSession.lastAction >= 5.0 then
+                    -- Prevent useless loop trades: MUST meet user-configured thresholds (Gems >= Min, Trait >= Min, or Units >= Min)
+                    -- Wait 7.0s between requests (exceeding server's REQUEST_COOLDOWN = 6.0s)
+                    if (data.Rolls or 0) >= minRolls and LocalPlayer.AccountAge >= minAge and not isCooldown and smartTrade.isReady and #smartTrade.offers > 0 then
+                        if os.clock() - tradeSession.lastAction >= 7.0 then
                             tradeSession.lastAction = os.clock()
                             TradeSignalRequestTrade:Fire(hostTarget)
                         end
@@ -1100,7 +1289,8 @@ local tradeEngine = task.spawn(function()
                         -- ==================== SENDER (ALT ACCOUNT) ====================
                         if tradeSession.phase == "Offer" or tradeSession.phase == "None" then
                             if not tradeSession.offered then
-                                local tradeables, totalTradeCount = GetTradeableOfferList(data)
+                                local smartTrade = GetSmartTradeData(data)
+                                local tradeables = smartTrade.offers
                                 local offeredCount = 0
 
                                 if #tradeables == 0 then
@@ -1120,7 +1310,8 @@ local tradeEngine = task.spawn(function()
                                 end
 
                                 tradeSession.offered = true
-                                task.wait(0.4)
+                                tradeSession.lastAction = os.clock()
+                                task.wait(0.3)
                             end
 
                             -- Once items offered (and we offered valid items), Ready up
@@ -1128,7 +1319,7 @@ local tradeEngine = task.spawn(function()
                                 tradeSession.lastAction = os.clock()
                                 TradeSignalAdvanceTrade:Fire() -- Ready
                             end
-                        elseif tradeSession.phase == "Confirm" then
+                        elseif tradeSession.phase == "Confirm" or tradeSession.phase == "Countdown" then
                             -- Confirm and Accept
                             if not tradeSession.ownAccepted and (os.clock() - tradeSession.lastAction >= 0.8) then
                                 tradeSession.lastAction = os.clock()
@@ -1143,7 +1334,7 @@ local tradeEngine = task.spawn(function()
                                 tradeSession.lastAction = os.clock()
                                 TradeSignalAdvanceTrade:Fire() -- Host Ready
                             end
-                        elseif tradeSession.phase == "Confirm" then
+                        elseif tradeSession.phase == "Confirm" or tradeSession.phase == "Countdown" then
                             -- Host accepts trade in confirm phase
                             if not tradeSession.ownAccepted and (os.clock() - tradeSession.lastAction >= 0.8) then
                                 tradeSession.lastAction = os.clock()
@@ -1204,29 +1395,56 @@ local statsEngine = task.spawn(function()
                         local hostId = tonumber(hostStr)
                         local isHost = (hostId and LocalPlayer.UserId == hostId) or (LocalPlayer.Name:lower() == hostStr:lower())
 
-                        if CFG.AutoTrade and tostring(CFG.TradeHost) ~= "0" and not isHost then
-                            local minRolls = (TradeConfig and TradeConfig.MIN_ROLLS) or 1000
-                            local curRolls = data.Rolls or 0
-                            local tradeables = GetTradeableOfferList(data)
-                            local isCooldown = tradeSession.cooldownUntil and os.clock() < tradeSession.cooldownUntil
+                        if CFG.AutoTrade and tostring(CFG.TradeHost) ~= "0" and CFG.TradeHost ~= "" then
+                            if not isHost then
+                                local minRolls = (TradeConfig and TradeConfig.MIN_ROLLS) or 1000
+                                local curRolls = data.Rolls or 0
+                                local isCooldown = tradeSession.cooldownUntil and os.clock() < tradeSession.cooldownUntil
+                                local smartTrade = GetSmartTradeData(data)
 
-                            if curRolls < minRolls then
-                                OverlayUI.StatusLabel.Text = string.format("Status : ฟาร์มเพื่อเทรด (%d/%d Rolls)", curRolls, minRolls)
-                            elseif tradeSession.active then
-                                OverlayUI.StatusLabel.Text = "Status : กำลังเทรดส่งของ"
-                            elseif isCooldown then
-                                OverlayUI.StatusLabel.Text = string.format("Status : ฟาร์มรอคูลดาวน์เทรด (%ds)", math.max(0, math.ceil(tradeSession.cooldownUntil - os.clock())))
-                            elseif #tradeables == 0 then
-                                OverlayUI.StatusLabel.Text = "Status : กำลังฟาร์ม (รอของเทรด)"
+                                local hostTarget = nil
+                                for _, p in ipairs(Players:GetPlayers()) do
+                                    if p ~= LocalPlayer and ((hostId and p.UserId == hostId) or (p.Name:lower() == hostStr:lower())) then
+                                        hostTarget = p
+                                        break
+                                    end
+                                end
+
+                                if curRolls < minRolls then
+                                    OverlayUI.StatusLabel.Text = string.format("Status : ฟาร์มเพื่อเทรด (%d/%d Rolls)", curRolls, minRolls)
+                                elseif not hostTarget then
+                                    OverlayUI.StatusLabel.Text = string.format("Status : รอ Host (%s) ในเซิร์ฟ", tostring(CFG.TradeHost))
+                                elseif isCooldown then
+                                    OverlayUI.StatusLabel.Text = string.format("Status : พักคูลดาวน์เทรด (%ds)", math.max(0, math.ceil(tradeSession.cooldownUntil - os.clock())))
+                                elseif not smartTrade.isReady or #smartTrade.offers == 0 then
+                                    OverlayUI.StatusLabel.Text = "Status : " .. tostring(smartTrade.statusText)
+                                elseif tradeSession.active then
+                                    if tradeSession.phase == "Confirm" or tradeSession.phase == "Countdown" then
+                                        OverlayUI.StatusLabel.Text = "Status : กำลังยืนยันการเทรด..."
+                                    elseif tradeSession.ownReady then
+                                        OverlayUI.StatusLabel.Text = "Status : วางของครบแล้ว (รอ Host ยืนยัน)"
+                                    else
+                                        OverlayUI.StatusLabel.Text = "Status : กำลังส่งของเข้าเทรด..."
+                                    end
+                                else
+                                    OverlayUI.StatusLabel.Text = string.format("Status : ขอเทรดหา Host (%s)", hostTarget.DisplayName or hostTarget.Name)
+                                end
                             else
-                                OverlayUI.StatusLabel.Text = string.format("Status : พร้อมเทรด (%d รายการ)", #tradeables)
+                                -- Host Status Display
+                                if tradeSession.active then
+                                    if tradeSession.phase == "Confirm" or tradeSession.phase == "Countdown" then
+                                        OverlayUI.StatusLabel.Text = "Status : กำลังรับของเทรด (ยืนยัน)"
+                                    elseif tradeSession.otherReady then
+                                        OverlayUI.StatusLabel.Text = "Status : ไก่พร้อมแล้ว (กำลังกด Ready)"
+                                    else
+                                        OverlayUI.StatusLabel.Text = "Status : กำลังรอไก่วางของเทรด..."
+                                    end
+                                else
+                                    OverlayUI.StatusLabel.Text = "Status : คลังรับของ (รอคำขอเทรด)"
+                                end
                             end
                         else
-                            if tradeSession.active then
-                                OverlayUI.StatusLabel.Text = "Status : กำลังเทรดรับของ"
-                            else
-                                OverlayUI.StatusLabel.Text = "Status : กำลังฟาร์ม"
-                            end
+                            OverlayUI.StatusLabel.Text = "Status : กำลังฟาร์ม"
                         end
                     end
                     OverlayUI.MoneyLabel.Text       = "เงินในตัว : $" .. FormatNumber(money)
@@ -1239,6 +1457,14 @@ local statsEngine = task.spawn(function()
                     end
                     if OverlayUI.StorageLabel then
                         OverlayUI.StorageLabel.Text = string.format("Storage : %d/%d", uCount, maxStorage)
+                    end
+                    if OverlayUI.TokensLabel then
+                        local gems, traits, tickets = GetBackpackItemStats(data)
+                        OverlayUI.TokensLabel.Text = string.format("Gems : %s • Trait : %s • Ticket : %s",
+                            FormatNumber(gems),
+                            FormatNumber(traits),
+                            FormatNumber(tickets)
+                        )
                     end
                     if OverlayUI.RuntimeLabel then
                         OverlayUI.RuntimeLabel.Text = "Runtime : " .. runtimeStr
