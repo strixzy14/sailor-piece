@@ -323,6 +323,10 @@ local TradeSignalEvent              = TradeComm:GetSignal("TradeEvent")
 local GradeComm                     = ClientComm.new(ReplicatedStorage.Network, false, "GradeService")
 local GradeSignalRoll               = GradeComm:GetSignal("Roll")
 
+-- RedNet ClientComm for Quests & Quest Shop
+local QuestComm                     = ClientComm.new(ReplicatedStorage.Network, false, "QuestService")
+local QuestSignalBuy                = QuestComm:GetSignal("Buy")
+
 -- =========================================================================
 -- [5] OVERLAY HUD (DEAD CENTER • NO BACKGROUND • IMAGE 2 MINIMAL STYLE)
 -- =========================================================================
@@ -606,6 +610,7 @@ local farmEngine = task.spawn(function()
     local lastBoostCheck  = 0
     local lastCodeCheck   = 0
     local lastGradeRoll   = 0
+    local lastTicketShopCheck = 0
     local attemptedCodes  = {}
     local allCodesDone    = false
 
@@ -913,6 +918,70 @@ local farmEngine = task.spawn(function()
                                     GradeSignalRoll:Fire(uid, true)
                                     break -- Process one roll per cycle for maximum stability
                                 end
+                            end
+                        end
+                    end
+                end)
+            end
+
+            -- 14. Auto Ticket Exchange (Priority: Gamepasses -> Ultra Luck, Roll Speed, More Cash, Luck -> Lucky Spin -> Consumables)
+            if not isTradingNow and (now - lastTicketShopCheck >= 1.5) then
+                lastTicketShopCheck = now
+                pcall(function()
+                    local tickets = 0
+                    if data.Inventory then
+                        for _, entry in pairs(data.Inventory) do
+                            if entry and entry.name then
+                                local nm = string.lower(entry.name)
+                                if nm == "tickets" or nm == "ticket" or string.find(nm, "ticket") then
+                                    tickets = tickets + (entry.amount or entry.count or 1)
+                                end
+                            end
+                        end
+                    end
+                    if tickets <= 0 then return end
+
+                    local ownedPasses = data.OwnedGamepasses or {}
+
+                    -- Priority order specified by user:
+                    -- 1. Ultra Luck (599 tickets, Gamepass)
+                    -- 2. Roll Speed (499 tickets, Gamepass)
+                    -- 3. More Cash (199 tickets, Gamepass)
+                    -- 4. Luck (199 tickets, Gamepass)
+                    -- 5. Lucky Spin (20 tickets)
+                    -- 6. Trait Reroll (1 ticket)
+                    -- 7. Gems (1 ticket)
+                    local priorityList = {
+                        { name = "Ultra Luck",  price = 599, isPass = true },
+                        { name = "Roll Speed",  price = 499, isPass = true },
+                        { name = "More Cash",   price = 199, isPass = true },
+                        { name = "Luck",        price = 199, isPass = true },
+                        { name = "Lucky Spin",  price = 20,  isPass = false },
+                        { name = "Trait Reroll",price = 1,   isPass = false },
+                        { name = "Gems",        price = 1,   isPass = false },
+                    }
+
+                    for _, item in ipairs(priorityList) do
+                        if item.isPass then
+                            -- Only buy gamepass if player doesn't already own it and has enough tickets
+                            if not ownedPasses[item.name] and tickets >= item.price then
+                                QuestSignalBuy:Fire(item.name)
+                                break
+                            end
+                        else
+                            -- Consumable items: buy once all unowned gamepasses that are affordable or higher priority are settled
+                            -- If user has enough for higher unowned gamepass, save up; otherwise if they only have leftover tickets, exchange them
+                            local anyPassPending = false
+                            for _, pItem in ipairs(priorityList) do
+                                if pItem.isPass and not ownedPasses[pItem.name] and tickets >= pItem.price then
+                                    anyPassPending = true
+                                    break
+                                end
+                            end
+
+                            if not anyPassPending and tickets >= item.price then
+                                QuestSignalBuy:Fire(item.name)
+                                break
                             end
                         end
                     end
